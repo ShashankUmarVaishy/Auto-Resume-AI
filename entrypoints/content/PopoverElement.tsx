@@ -1,3 +1,5 @@
+declare const chrome: any;
+
 import React, { useState, useEffect, useRef } from 'react';
 import { FieldDetector } from '../../src/utils/FieldDetector';
 import type { FieldMatch } from '../../src/utils/FieldDetector';
@@ -19,7 +21,13 @@ export default function PopoverElement() {
   const [showPopover, setShowPopover] = useState(false);
   const [copied, setCopied] = useState(false);
   const [tailoringLoading, setTailoringLoading] = useState(false);
+  const [showManualSelect, setShowManualSelect] = useState(false);
   
+  // Draggable coordinates
+  const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
   // Project carousel states
   const [activeProjectIdx, setActiveProjectIdx] = useState(0);
 
@@ -52,6 +60,8 @@ export default function PopoverElement() {
           setActiveRect(input.getBoundingClientRect());
           setShowSpark(true);
           setShowPopover(false);
+          setShowManualSelect(false);
+          setDragPosition(null);
         } else {
           // If no match found, hide spark
           setShowSpark(false);
@@ -78,6 +88,7 @@ export default function PopoverElement() {
       
       if (showPopover && popoverRef.current && !popoverRef.current.contains(target) && target !== activeEl) {
         setShowPopover(false);
+        setShowManualSelect(false);
       }
     };
 
@@ -94,18 +105,54 @@ export default function PopoverElement() {
     };
   }, [activeEl, showPopover, store.resumeProfile]);
 
+  // Mouse Dragging Handlers for Movable Popover Window
+  const handleDragStart = (e: React.MouseEvent) => {
+    if (e.button !== 0) return; // Left click only
+    setIsDragging(true);
+    const rect = popoverRef.current?.getBoundingClientRect();
+    if (rect) {
+      setDragStart({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      setDragPosition({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isDragging, dragStart]);
+
   if (!showSpark || !activeRect || !detectedMatch) return null;
 
-  // Calculate coordinates relative to screen viewport
-  const sparkTop = activeRect.top + window.scrollY + (activeRect.height - 24) / 2;
-  const sparkLeft = activeRect.right + window.scrollX - 60; // Render slightly inside the right edge
+  // Calculate coordinates relative to screen viewport (using position: fixed for scroll resilience)
+  const sparkTop = activeRect.top + (activeRect.height - 24) / 2;
+  const sparkLeft = activeRect.right - 60; // Render slightly inside the right edge
 
-  // Viewport Collision Check (approx 260px estimated popover height)
-  const openAbove = activeRect.bottom + 260 > window.innerHeight;
+  // Viewport Collision Check (approx 320px estimated popover height with manual selector list)
+  const openAbove = activeRect.bottom + 320 > window.innerHeight;
   const popoverTop = openAbove 
-    ? activeRect.top + window.scrollY - 10 
-    : activeRect.bottom + window.scrollY + 6;
-  const popoverLeft = activeRect.left + window.scrollX;
+    ? activeRect.top - 10 
+    : activeRect.bottom + 6;
+  const popoverLeft = activeRect.left;
 
   // Handle direct injection
   const handleAutofill = (valueToFill: string) => {
@@ -113,6 +160,15 @@ export default function PopoverElement() {
       setNativeValue(activeEl, valueToFill);
       setShowPopover(false);
       setShowSpark(false);
+    }
+  };
+
+  // Handle options page opening
+  const handleOpenOptions = () => {
+    try {
+      chrome.runtime.openOptionsPage();
+    } catch (e) {
+      window.open(chrome.runtime.getURL('options.html'), '_blank');
     }
   };
 
@@ -162,6 +218,11 @@ export default function PopoverElement() {
     }
   };
 
+  // Draggable top/left offsets
+  const finalTop = dragPosition ? `${dragPosition.y}px` : `${popoverTop}px`;
+  const finalLeft = dragPosition ? `${dragPosition.x}px` : `${popoverLeft}px`;
+  const translationClass = (openAbove && !dragPosition) ? '-translate-y-full' : '';
+
   return (
     <div style={{ pointerEvents: 'auto' }}>
       {/* 1. Spark Badge next to active input */}
@@ -170,7 +231,7 @@ export default function PopoverElement() {
           ref={sparkRef}
           onClick={() => setShowPopover(true)}
           style={{
-            position: 'absolute',
+            position: 'fixed',
             top: `${sparkTop}px`,
             left: `${sparkLeft}px`,
             zIndex: 9999999,
@@ -187,31 +248,159 @@ export default function PopoverElement() {
         <div
           ref={popoverRef}
           style={{
-            position: 'absolute',
-            top: `${popoverTop}px`,
-            left: `${popoverLeft}px`,
+            position: 'fixed',
+            top: finalTop,
+            left: finalLeft,
             zIndex: 9999999,
             minWidth: '280px',
             maxWidth: '360px',
           }}
-          className={`bg-darkCard border border-darkBorder rounded-xl shadow-2xl p-4 text-slate-100 font-sans transition-all duration-200 ${openAbove ? '-translate-y-full' : ''}`}
+          className={`bg-darkCard border border-darkBorder rounded-xl shadow-2xl p-4 text-slate-100 font-sans transition-all duration-200 ${translationClass}`}
         >
-          {/* Popover Header */}
-          <div className="flex justify-between items-center border-b border-darkBorder pb-2 mb-3">
+          {/* Popover Header (Draggable) */}
+          <div 
+            onMouseDown={handleDragStart}
+            className="flex justify-between items-center border-b border-darkBorder pb-2 mb-3 cursor-move select-none"
+            title="Drag to move panel"
+          >
             <div className="flex items-center space-x-1.5 text-accentCyan">
+              <span className="text-slate-500 font-mono text-[10px] mr-1">⋮⋮</span>
               <Brain className="w-4 h-4" />
               <span className="text-xs font-bold uppercase tracking-wider">{detectedMatch.label}</span>
             </div>
             <button
               onClick={() => setShowPopover(false)}
-              className="text-slate-400 hover:text-slate-200 p-0.5"
+              className="text-slate-400 hover:text-slate-200 p-0.5 cursor-pointer"
+              onMouseDown={(e) => e.stopPropagation()} // Prevent dragging from close button click
             >
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          {/* PROJECT SELECTOR CAROUSEL VIEW */}
-          {detectedMatch.type === 'project_selector' ? (
+          {/* PROJECT SELECTOR / MANUAL SELECTOR / STANDARD FIELD VIEW */}
+          {showManualSelect ? (
+            <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+              <div className="flex justify-between items-center border-b border-darkBorder pb-1.5 mb-2">
+                <span className="text-[10px] uppercase font-bold text-accentCyan">Available Profile Fields</span>
+                <button 
+                  onClick={() => setShowManualSelect(false)} 
+                  className="text-[9px] text-slate-400 hover:text-white cursor-pointer"
+                >
+                  ← Back
+                </button>
+              </div>
+
+              {/* Personal details list */}
+              <div className="space-y-1">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold block">Personal Info</span>
+                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.firstName || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
+                  >
+                    First Name
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.lastName || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
+                  >
+                    Last Name
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.fullName || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
+                  >
+                    Full Name
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.email || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
+                  >
+                    Email
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.phone || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
+                  >
+                    Phone
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.linkedin || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
+                  >
+                    LinkedIn
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.github || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
+                  >
+                    GitHub
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.portfolio || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
+                  >
+                    Portfolio
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.summaryStatement || ''); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer col-span-2"
+                  >
+                    Bio / Summary
+                  </button>
+                </div>
+              </div>
+
+              {/* Skills list */}
+              <div className="space-y-1 pt-1.5 border-t border-darkBorder/40">
+                <span className="text-[9px] text-slate-500 uppercase font-semibold block">Skills</span>
+                <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                  <button
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.languages || []).join(', ')); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
+                  >
+                    Languages
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.frameworks || []).join(', ')); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
+                  >
+                    Frameworks
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.toolsAndPlatforms || []).join(', ')); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
+                  >
+                    Tools & Platforms
+                  </button>
+                  <button
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.coreCompetencies || []).join(', ')); setShowManualSelect(false); }}
+                    className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
+                  >
+                    Core Competencies
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom QA snippets */}
+              {store.resumeProfile?.customSnippets && store.resumeProfile.customSnippets.length > 0 && (
+                <div className="space-y-1 pt-1.5 border-t border-darkBorder/40">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold block">QA Snippets</span>
+                  <div className="space-y-1 text-[10px]">
+                    {store.resumeProfile.customSnippets.map((snip, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => { handleAutofill(snip.content); setShowManualSelect(false); }}
+                        className="w-full text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 block cursor-pointer"
+                      >
+                        {snip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : detectedMatch.type === 'project_selector' ? (
             <div>
               {(() => {
                 const projects = store.resumeProfile?.projects || [];
@@ -300,6 +489,15 @@ export default function PopoverElement() {
                         {copied ? <Check className="w-4 h-4 text-accentGreen" /> : <Clipboard className="w-4 h-4" />}
                       </button>
                     </div>
+
+                    <div className="mt-2.5 pt-1.5 border-t border-darkBorder/40 text-center">
+                      <button
+                        onClick={() => setShowManualSelect(true)}
+                        className="text-[9px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                      >
+                        🔍 Select field manually...
+                      </button>
+                    </div>
                   </div>
                 );
               })()}
@@ -308,28 +506,51 @@ export default function PopoverElement() {
             /* STANDARD TEXT/SELECT FIELD VIEW */
             <div>
               <p className="text-xs text-slate-300 bg-darkBg/60 border border-darkBorder p-2.5 rounded-lg mb-3 break-words max-h-32 overflow-y-auto">
-                {detectedMatch.value}
+                {detectedMatch.value || <span className="italic text-slate-500">Field is empty in profile</span>}
               </p>
               
-              <div className="flex space-x-2">
+              {detectedMatch.fieldKey === 'setup_prompt' ? (
                 <button
-                  onClick={() => handleAutofill(detectedMatch.value)}
-                  className="flex-1 bg-accentCyan hover:bg-cyan-500 text-darkBg font-bold py-1.5 rounded text-xs cursor-pointer transition-colors"
+                  onClick={handleOpenOptions}
+                  className="w-full bg-accentCyan hover:bg-zinc-200 text-darkBg font-bold py-1.5 rounded text-xs cursor-pointer transition-all hover:scale-[1.02] duration-150 flex items-center justify-center space-x-1"
                 >
-                  Autofill Field
+                  <Brain className="w-3.5 h-3.5" />
+                  <span>Configure Profile</span>
                 </button>
-                <button
-                  onClick={() => handleCopyToClipboard(detectedMatch.value)}
-                  className="px-3 bg-slate-800 hover:bg-slate-700 border border-darkBorder rounded text-slate-300 flex items-center justify-center cursor-pointer transition-colors"
-                  title="Copy to clipboard"
-                >
-                  {copied ? (
-                    <Check className="w-4 h-4 text-accentGreen" />
-                  ) : (
-                    <Clipboard className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
+              ) : (
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => handleAutofill(detectedMatch.value)}
+                    disabled={!detectedMatch.value}
+                    className="flex-1 bg-accentCyan hover:bg-cyan-500 text-darkBg font-bold py-1.5 rounded text-xs cursor-pointer transition-colors disabled:opacity-50"
+                  >
+                    Autofill Field
+                  </button>
+                  <button
+                    onClick={() => handleCopyToClipboard(detectedMatch.value)}
+                    disabled={!detectedMatch.value}
+                    className="px-3 bg-slate-800 hover:bg-slate-700 border border-darkBorder rounded text-slate-300 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-50"
+                    title="Copy to clipboard"
+                  >
+                    {copied ? (
+                      <Check className="w-4 h-4 text-accentGreen" />
+                    ) : (
+                      <Clipboard className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {detectedMatch.fieldKey !== 'setup_prompt' && (
+                <div className="mt-3 pt-2 border-t border-darkBorder/40 text-center">
+                  <button
+                    onClick={() => setShowManualSelect(true)}
+                    className="text-[9px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                  >
+                    🔍 Select field manually...
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

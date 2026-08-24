@@ -116,7 +116,7 @@ const GEMINI_SCHEMA = {
 };
 
 /**
- * Invokes Gemini 1.5 Flash to extract structured resume details from raw text.
+ * Invokes Gemini 3.6 Flash to extract structured resume details from raw text.
  */
 export async function parseResumeWithAI(rawText: string, apiKey: string): Promise<MasterResumeProfile> {
   const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`;

@@ -12,8 +12,6 @@ export class FieldDetector {
    * Evaluates an HTML input or textarea element and returns the best matching profile fields.
    */
   static detect(element: HTMLElement, profile: MasterResumeProfile | null): FieldMatch | null {
-    if (!profile) return null;
-
     const input = element as HTMLInputElement | HTMLTextAreaElement;
     const id = (input.id || '').toLowerCase();
     const name = (input.name || '').toLowerCase();
@@ -23,12 +21,46 @@ export class FieldDetector {
 
     // Gather text elements surrounding the input (Tiers 2 & 3)
     const labelText = this.getAssociatedLabelText(input).toLowerCase();
-
     const isTextArea = input.tagName.toLowerCase() === 'textarea';
 
     // Combine all heuristic signals for token matching
     const searchString = `${id} ${name} ${placeholder} ${ariaLabel} ${dataAutomationId} ${labelText}`.trim();
 
+    console.log("[AutoResume FieldDetector] Evaluating element:", {
+      tag: input.tagName,
+      id,
+      name,
+      placeholder,
+      labelText,
+      searchString
+    });
+
+    if (!profile) {
+      console.log("[AutoResume FieldDetector] Profile is empty. Returning setup prompt fallback.");
+      return {
+        fieldKey: 'setup_prompt',
+        label: 'Setup Profile',
+        value: 'Your Master Resume Profile is empty. Please open the extension Options page, upload your resume, and configure your details.',
+        type: 'text'
+      };
+    }
+
+    const match = this.runRules(searchString, isTextArea, profile);
+    if (match) {
+      console.log("[AutoResume FieldDetector] MATCH FOUND:", match);
+      return match;
+    }
+
+    console.log("[AutoResume FieldDetector] No heuristic match. Returning generic fallback.");
+    return {
+      fieldKey: 'generic',
+      label: 'Autofill Field',
+      value: '',
+      type: isTextArea ? 'textarea' : 'text'
+    };
+  }
+
+  private static runRules(searchString: string, isTextArea: boolean, profile: MasterResumeProfile): FieldMatch | null {
     // 1. PROJECT CAROUSEL DETECT (for textareas relating to projects, descriptions, or accomplishments)
     if (isTextArea && (
       searchString.includes('project') || 
@@ -273,7 +305,6 @@ export class FieldDetector {
    * Tier 2 Helper: Traverse DOM to extract label text corresponding to target input.
    */
   private static getAssociatedLabelText(input: HTMLInputElement | HTMLTextAreaElement): string {
-    // 1. Try to find label using 'for' attribute matching the input element's ID
     if (input.id) {
       const label = document.querySelector(`label[for="${input.id}"]`);
       if (label && label.textContent) {
@@ -281,19 +312,16 @@ export class FieldDetector {
       }
     }
 
-    // 2. Try to find label as parent node
     let parent = input.parentElement;
     while (parent) {
       if (parent.tagName.toLowerCase() === 'label') {
         return parent.textContent?.trim() || '';
       }
-      // Or check if sibling container has label elements
       const siblingLabel = parent.querySelector('label');
       if (siblingLabel && siblingLabel.textContent) {
         return siblingLabel.textContent.trim();
       }
       
-      // Also match Greenhouse/Workday specific label containers
       const headerSpan = parent.querySelector('.label, .control-label, .field-label');
       if (headerSpan && headerSpan.textContent) {
         return headerSpan.textContent.trim();

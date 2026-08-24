@@ -5,7 +5,8 @@ import { parseResumeWithAI } from '../../src/utils/gemini';
 import type { DocumentFile, MasterResumeProfile } from '../../src/types';
 import { 
   Lock, Unlock, FileText, Settings, User, Plus, Trash, Check, Edit2, 
-  Brain, Key, RefreshCw, AlertTriangle, HelpCircle, Save, ChevronRight
+  Brain, Key, RefreshCw, AlertTriangle, HelpCircle, Save, ChevronRight,
+  Download, Upload
 } from 'lucide-react';
 
 export default function App() {
@@ -30,6 +31,26 @@ export default function App() {
   const [uploadError, setUploadError] = useState('');
   
   // Edit Profile Mode states
+  const [editedProfile, setEditedProfile] = useState<MasterResumeProfile | null>(null);
+  const [isEditingRawJson, setIsEditingRawJson] = useState(false);
+  const [jsonText, setJsonText] = useState('');
+
+  // Sync jsonText when editedProfile changes
+  useEffect(() => {
+    if (editedProfile) {
+      setJsonText(JSON.stringify(editedProfile, null, 2));
+    } else {
+      setJsonText('');
+    }
+  }, [editedProfile]);
+
+  // Sync local editedProfile state when store loads it
+  useEffect(() => {
+    if (store.resumeProfile && !editedProfile) {
+      setEditedProfile(store.resumeProfile);
+    }
+  }, [store.resumeProfile, editedProfile]);
+
   const [editingProjectIndex, setEditingProjectIndex] = useState<number | null>(null);
   const [editingWorkIndex, setEditingWorkIndex] = useState<number | null>(null);
   const [editingEduIndex, setEditingEduIndex] = useState<number | null>(null);
@@ -165,9 +186,75 @@ export default function App() {
 
   // Profile Save helper
   const handleSaveProfile = () => {
-    if (!store.resumeProfile) return;
-    store.updateResumeProfile(store.resumeProfile);
+    if (!editedProfile) return;
+    store.updateResumeProfile(editedProfile);
     alert('Master Profile saved locally!');
+  };
+
+  // Raw JSON Save helper
+  const handleSaveRawJson = () => {
+    try {
+      const parsed = JSON.parse(jsonText) as MasterResumeProfile;
+      if (!parsed.personalInfo || !parsed.projects || !parsed.skills) {
+        throw new Error('Missing core profile objects (personalInfo, projects, or skills)');
+      }
+      setEditedProfile(parsed);
+      store.updateResumeProfile(parsed);
+      alert('Master Profile raw JSON saved locally!');
+      setIsEditingRawJson(false);
+    } catch (err) {
+      alert(`Invalid JSON format: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Export Profile to local JSON file download
+  const handleExportProfile = () => {
+    if (!store.resumeProfile) {
+      alert('No profile data available to export.');
+      return;
+    }
+    try {
+      const jsonString = JSON.stringify(store.resumeProfile, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `autoresume_profile_${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Failed to export profile: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Import Profile from local JSON file
+  const handleImportProfile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const text = event.target?.result;
+        if (typeof text !== 'string') return;
+        const parsed = JSON.parse(text) as MasterResumeProfile;
+        
+        // Simple schema validation
+        if (!parsed.personalInfo || !parsed.projects || !parsed.skills) {
+          throw new Error('JSON is missing core profile sections (personalInfo, projects, or skills)');
+        }
+
+        setEditedProfile(parsed);
+        await store.updateResumeProfile(parsed);
+        alert('Master Resume Profile imported successfully!');
+      } catch (err) {
+        alert(`Failed to parse/import JSON: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Add QA Snippet
@@ -414,23 +501,79 @@ export default function App() {
                   Manage the structured database of your achievements, skills, and background.
                 </p>
               </div>
-              <button
-                onClick={handleSaveProfile}
-                disabled={!store.resumeProfile}
-                className="bg-accentCyan hover:bg-cyan-500 disabled:opacity-50 text-darkBg font-bold px-4 py-2 rounded-lg text-sm flex items-center space-x-2 cursor-pointer transition-colors shadow-lg shadow-accentCyan/15"
-              >
-                <Save className="w-4 h-4" />
-                <span>Save Profile Changes</span>
-              </button>
+              
+              <div className="flex items-center space-x-2.5">
+                {isEditingRawJson ? (
+                  <button
+                    onClick={handleSaveRawJson}
+                    className="bg-accentCyan hover:bg-zinc-200 text-darkBg font-bold px-4 py-2 rounded-lg text-xs flex items-center space-x-1.5 cursor-pointer transition-colors shadow-lg"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Raw JSON</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSaveProfile}
+                    disabled={!editedProfile}
+                    className="bg-accentCyan hover:bg-zinc-200 disabled:opacity-50 text-darkBg font-bold px-4 py-2 rounded-lg text-xs flex items-center space-x-1.5 cursor-pointer transition-colors shadow-lg"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Changes</span>
+                  </button>
+                )}
+                
+                <button
+                  onClick={() => setIsEditingRawJson(!isEditingRawJson)}
+                  disabled={!editedProfile}
+                  className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-darkBorder font-bold px-4 py-2 rounded-lg text-xs flex items-center space-x-1.5 cursor-pointer transition-colors"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>{isEditingRawJson ? 'Visual Editor' : 'Raw JSON'}</span>
+                </button>
+
+                <button
+                  onClick={handleExportProfile}
+                  disabled={!store.resumeProfile}
+                  className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-200 border border-darkBorder font-bold px-4 py-2 rounded-lg text-xs flex items-center space-x-1.5 cursor-pointer transition-colors"
+                  title="Export Profile to JSON file"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export JSON</span>
+                </button>
+                
+                <label className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-darkBorder font-bold px-4 py-2 rounded-lg text-xs flex items-center space-x-1.5 cursor-pointer transition-colors" title="Import Profile from JSON file">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Import JSON</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportProfile}
+                    className="hidden"
+                  />
+                </label>
+              </div>
             </div>
 
-            {!store.resumeProfile ? (
+            {!editedProfile ? (
               <div className="bg-darkCard border border-darkBorder rounded-xl p-8 text-center text-slate-400">
                 <Brain className="w-12 h-12 mx-auto text-slate-500 mb-3" />
                 <h3 className="font-semibold text-slate-200">No Profile Data Found</h3>
                 <p className="text-xs max-w-sm mx-auto mt-2 text-slate-400">
                   Your profile database is empty. Go to the **Document Library** tab, upload a resume, and run the parser to fill it.
                 </p>
+              </div>
+            ) : isEditingRawJson ? (
+              <div className="bg-darkCard border border-darkBorder rounded-xl p-6 space-y-4">
+                <div className="flex justify-between items-center pb-2 border-b border-darkBorder">
+                  <h3 className="text-sm font-bold text-accentCyan uppercase tracking-widest">Raw Profile JSON Editor</h3>
+                </div>
+                <textarea
+                  value={jsonText}
+                  onChange={(e) => setJsonText(e.target.value)}
+                  rows={20}
+                  className="w-full bg-darkBg border border-darkBorder rounded-lg p-4 text-xs font-mono text-slate-200 focus:outline-none focus:border-accentCyan animate-pulse-once"
+                  placeholder='{ "personalInfo": ... }'
+                />
               </div>
             ) : (
               <div className="space-y-6">
@@ -444,11 +587,11 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Full Name</label>
                       <input
                         type="text"
-                        value={store.resumeProfile.personalInfo.fullName || ''}
+                        value={editedProfile.personalInfo?.fullName || ''}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.personalInfo.fullName = e.target.value;
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          updated.personalInfo = { ...updated.personalInfo, fullName: e.target.value };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accentCyan"
                       />
@@ -457,11 +600,11 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Email Address</label>
                       <input
                         type="email"
-                        value={store.resumeProfile.personalInfo.email || ''}
+                        value={editedProfile.personalInfo?.email || ''}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.personalInfo.email = e.target.value;
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          updated.personalInfo = { ...updated.personalInfo, email: e.target.value };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accentCyan"
                       />
@@ -470,11 +613,11 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Phone Number</label>
                       <input
                         type="text"
-                        value={store.resumeProfile.personalInfo.phone || ''}
+                        value={editedProfile.personalInfo?.phone || ''}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.personalInfo.phone = e.target.value;
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          updated.personalInfo = { ...updated.personalInfo, phone: e.target.value };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accentCyan"
                       />
@@ -483,11 +626,40 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">LinkedIn URL</label>
                       <input
                         type="text"
-                        value={store.resumeProfile.personalInfo.urls.linkedin || ''}
+                        value={editedProfile.personalInfo?.urls?.linkedin || ''}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.personalInfo.urls.linkedin = e.target.value;
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          const urls = { ...(updated.personalInfo?.urls || {}), linkedin: e.target.value };
+                          updated.personalInfo = { ...updated.personalInfo, urls };
+                          setEditedProfile(updated);
+                        }}
+                        className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accentCyan"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">GitHub URL</label>
+                      <input
+                        type="text"
+                        value={editedProfile.personalInfo?.urls?.github || ''}
+                        onChange={(e) => {
+                          const updated = { ...editedProfile };
+                          const urls = { ...(updated.personalInfo?.urls || {}), github: e.target.value };
+                          updated.personalInfo = { ...updated.personalInfo, urls };
+                          setEditedProfile(updated);
+                        }}
+                        className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accentCyan"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Portfolio Link</label>
+                      <input
+                        type="text"
+                        value={editedProfile.personalInfo?.urls?.portfolio || ''}
+                        onChange={(e) => {
+                          const updated = { ...editedProfile };
+                          const urls = { ...(updated.personalInfo?.urls || {}), portfolio: e.target.value };
+                          updated.personalInfo = { ...updated.personalInfo, urls };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accentCyan"
                       />
@@ -497,11 +669,11 @@ export default function App() {
                     <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Bio / Summary Statement</label>
                     <textarea
                       rows={3}
-                      value={store.resumeProfile.personalInfo.summaryStatement || ''}
+                      value={editedProfile.personalInfo?.summaryStatement || ''}
                       onChange={(e) => {
-                        const updated = { ...store.resumeProfile! };
-                        updated.personalInfo.summaryStatement = e.target.value;
-                        store.updateResumeProfile(updated);
+                        const updated = { ...editedProfile };
+                        updated.personalInfo = { ...updated.personalInfo, summaryStatement: e.target.value };
+                        setEditedProfile(updated);
                       }}
                       className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-accentCyan"
                     />
@@ -516,7 +688,8 @@ export default function App() {
                     </h3>
                     <button
                       onClick={() => {
-                        const updated = { ...store.resumeProfile! };
+                        const updated = { ...editedProfile };
+                        updated.projects = [...(updated.projects || [])];
                         updated.projects.push({
                           id: `proj-${Date.now()}`,
                           name: 'New Project',
@@ -524,7 +697,7 @@ export default function App() {
                           description: '',
                           highlights: []
                         });
-                        store.updateResumeProfile(updated);
+                        setEditedProfile(updated);
                       }}
                       className="text-xs bg-slate-800 text-accentCyan hover:bg-slate-700 px-2 py-1 rounded flex items-center space-x-1 cursor-pointer"
                     >
@@ -533,28 +706,27 @@ export default function App() {
                     </button>
                   </div>
                   <div className="space-y-4">
-                    {store.resumeProfile.projects.map((project, idx) => (
+                    {(editedProfile.projects || []).map((project, idx) => (
                       <div key={project.id} className="border border-darkBorder bg-darkBg/40 p-4 rounded-lg">
                         <div className="flex justify-between items-center mb-3">
                           <input
                             type="text"
                             value={project.name}
                             onChange={(e) => {
-                              const updated = { ...store.resumeProfile! };
-                              if (updated.projects && updated.projects[idx]) {
-                                updated.projects[idx].name = e.target.value;
-                                store.updateResumeProfile(updated);
+                              const updated = { ...editedProfile };
+                              updated.projects = [...(updated.projects || [])];
+                              if (updated.projects[idx]) {
+                                updated.projects[idx] = { ...updated.projects[idx], name: e.target.value };
+                                setEditedProfile(updated);
                               }
                             }}
                             className="bg-transparent border-b border-transparent hover:border-slate-700 focus:border-accentCyan text-sm font-semibold text-slate-200 outline-none w-1/2"
                           />
                           <button
                             onClick={() => {
-                              const updated = { ...store.resumeProfile! };
-                              if (updated.projects) {
-                                updated.projects = updated.projects.filter((_, i) => i !== idx);
-                                store.updateResumeProfile(updated);
-                              }
+                              const updated = { ...editedProfile };
+                              updated.projects = (updated.projects || []).filter((_, i) => i !== idx);
+                              setEditedProfile(updated);
                             }}
                             className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
                           >
@@ -568,10 +740,14 @@ export default function App() {
                               type="text"
                               value={project.techStack.join(', ')}
                               onChange={(e) => {
-                                const updated = { ...store.resumeProfile! };
-                                if (updated.projects && updated.projects[idx]) {
-                                  updated.projects[idx].techStack = e.target.value.split(',').map(s => s.trim());
-                                  store.updateResumeProfile(updated);
+                                const updated = { ...editedProfile };
+                                updated.projects = [...(updated.projects || [])];
+                                if (updated.projects[idx]) {
+                                  updated.projects[idx] = { 
+                                    ...updated.projects[idx], 
+                                    techStack: e.target.value.split(',').map(s => s.trim()) 
+                                  };
+                                  setEditedProfile(updated);
                                 }
                               }}
                               className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
@@ -583,10 +759,11 @@ export default function App() {
                               rows={3}
                               value={project.description}
                               onChange={(e) => {
-                                const updated = { ...store.resumeProfile! };
-                                if (updated.projects && updated.projects[idx]) {
-                                  updated.projects[idx].description = e.target.value;
-                                  store.updateResumeProfile(updated);
+                                const updated = { ...editedProfile };
+                                updated.projects = [...(updated.projects || [])];
+                                if (updated.projects[idx]) {
+                                  updated.projects[idx] = { ...updated.projects[idx], description: e.target.value };
+                                  setEditedProfile(updated);
                                 }
                               }}
                               className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
@@ -608,11 +785,14 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Languages (e.g. Java, Python)</label>
                       <input
                         type="text"
-                        value={store.resumeProfile.skills.languages.join(', ')}
+                        value={(editedProfile.skills?.languages || []).join(', ')}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.skills.languages = e.target.value.split(',').map(s => s.trim());
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          updated.skills = {
+                            ...(updated.skills || { frameworks: [], toolsAndPlatforms: [], coreCompetencies: [] }),
+                            languages: e.target.value.split(',').map(s => s.trim())
+                          };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none"
                       />
@@ -621,11 +801,14 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Frameworks & Libraries</label>
                       <input
                         type="text"
-                        value={store.resumeProfile.skills.frameworks.join(', ')}
+                        value={(editedProfile.skills?.frameworks || []).join(', ')}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.skills.frameworks = e.target.value.split(',').map(s => s.trim());
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          updated.skills = {
+                            ...(updated.skills || { languages: [], toolsAndPlatforms: [], coreCompetencies: [] }),
+                            frameworks: e.target.value.split(',').map(s => s.trim())
+                          };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none"
                       />
@@ -634,11 +817,14 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Tools & Platforms</label>
                       <input
                         type="text"
-                        value={store.resumeProfile.skills.toolsAndPlatforms.join(', ')}
+                        value={(editedProfile.skills?.toolsAndPlatforms || []).join(', ')}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.skills.toolsAndPlatforms = e.target.value.split(',').map(s => s.trim());
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          updated.skills = {
+                            ...(updated.skills || { languages: [], frameworks: [], coreCompetencies: [] }),
+                            toolsAndPlatforms: e.target.value.split(',').map(s => s.trim())
+                          };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none"
                       />
@@ -647,11 +833,14 @@ export default function App() {
                       <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Core Competencies</label>
                       <input
                         type="text"
-                        value={store.resumeProfile.skills.coreCompetencies.join(', ')}
+                        value={(editedProfile.skills?.coreCompetencies || []).join(', ')}
                         onChange={(e) => {
-                          const updated = { ...store.resumeProfile! };
-                          updated.skills.coreCompetencies = e.target.value.split(',').map(s => s.trim());
-                          store.updateResumeProfile(updated);
+                          const updated = { ...editedProfile };
+                          updated.skills = {
+                            ...(updated.skills || { languages: [], frameworks: [], toolsAndPlatforms: [] }),
+                            coreCompetencies: e.target.value.split(',').map(s => s.trim())
+                          };
+                          setEditedProfile(updated);
                         }}
                         className="w-full bg-darkBg border border-darkBorder rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none"
                       />
