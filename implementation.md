@@ -67,35 +67,35 @@ We prioritize the security of the user's personal Gemini API Key. The diagram be
 ```mermaid
 sequenceDiagram
     actor User as Candidate (User)
-    participant Opt as Options Page (React UI)
+    participant OptionsUI as Options Page (React UI)
     participant SEC as Web Crypto API (PBKDF2/AES-GCM)
     participant DB as chrome.storage.local (Disk)
     participant MEM as Zustand Store (Memory)
     participant GEM as Google Gemini Endpoint (Direct)
 
     Note over User,DB: A. SETTING THE KEY & ENCRYPTION
-    User->>Opt: 1. Enter Gemini API Key + Password
-    Opt->>SEC: 2. Request encryption
+    User->>OptionsUI: 1. Enter Gemini API Key + Password
+    OptionsUI->>SEC: 2. Request encryption
     Note over SEC: Derives 256-bit AES Key<br/>from Password via PBKDF2<br/>(100,000 Iterations)
     SEC->>SEC: 3. Encrypt API Key (AES-GCM)
-    SEC-->>Opt: Return Ciphertext + Salt + IV
-    Opt->>DB: 4. Save Encrypted Key + Salt + IV to Storage
+    SEC-->>OptionsUI: Return Ciphertext + Salt + IV
+    OptionsUI->>DB: 4. Save Encrypted Key + Salt + IV to Storage
     Note over DB: API Key is stored on disk<br/>in encrypted form only
 
     Note over User,MEM: B. UNLOCKING THE EXTENSION
-    User->>Opt: 1. Enter Password to Unlock
-    Opt->>DB: 2. Fetch Encrypted Key & Verification Token
-    DB-->>Opt: Return Encrypted Data
-    Opt->>SEC: 3. Decrypt Verification Token & API Key
-    SEC-->>Opt: Return Plaintext API Key
-    Opt->>MEM: 4. Store Plaintext Key in-memory
+    User->>OptionsUI: 1. Enter Password to Unlock
+    OptionsUI->>DB: 2. Fetch Encrypted Key & Verification Token
+    DB-->>OptionsUI: Return Encrypted Data
+    OptionsUI->>SEC: 3. Decrypt Verification Token & API Key
+    SEC-->>OptionsUI: Return Plaintext API Key
+    OptionsUI->>MEM: 4. Store Plaintext Key in-memory
     Note over MEM: Key lives in volatile RAM only.<br/>Destroyed if browser/tab closes.
 
     Note over User,GEM: C. AI TASKS RUNNING (PARSING/TAILORING)
-    User->>Opt: 1. Click "Parse Resume" or "Tailor Text"
-    MEM-->>Opt: Retrieve plaintext key from RAM
-    Opt->>GEM: 2. HTTPS POST request with key to Google
-    GEM-->>Opt: Return API Response
+    User->>OptionsUI: 1. Click "Parse Resume" or "Tailor Text"
+    MEM-->>OptionsUI: Retrieve plaintext key from RAM
+    OptionsUI->>GEM: 2. HTTPS POST request with key to Google
+    GEM-->>OptionsUI: Return API Response
     Note over GEM: No third-party servers involved.<br/>Direct secure connection to Google.
 ```
 
