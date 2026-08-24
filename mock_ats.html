@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AutoResume AI - ATS Testing Sandbox</title>
+  <style>
+    body {
+      background-color: #0F172A;
+      color: #F8FAFC;
+      font-family: system-ui, -apple-system, sans-serif;
+      padding: 2rem;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .card {
+      background-color: #1E293B;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    label {
+      display: block;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #94A3B8;
+      margin-bottom: 0.5rem;
+    }
+    input[type="text"], input[type="email"], textarea {
+      width: 100%;
+      background-color: #0F172A;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      padding: 0.625rem;
+      color: #F8FAFC;
+      font-size: 0.875rem;
+      box-sizing: border-box;
+    }
+    input[type="text"]:focus, input[type="email"]:focus, textarea:focus {
+      outline: 2px solid #06B6D4;
+      border-color: transparent;
+    }
+    .btn {
+      background-color: #06B6D4;
+      color: #0F172A;
+      border: none;
+      padding: 0.75rem 1.5rem;
+      font-weight: 700;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .btn:hover {
+      background-color: #22D3EE;
+    }
+    .badge {
+      display: inline-block;
+      background-color: #334155;
+      color: #38BDF8;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.5rem;
+      border-radius: 4px;
+      margin-bottom: 1rem;
+    }
+    .state-trap-indicator {
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      color: #F43F5E;
+    }
+    .state-trap-indicator.synced {
+      color: #10B981;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>AutoResume AI Sandbox</h1>
+  <p style="color: #94A3B8; margin-bottom: 2rem;">
+    Use this page to test the browser extension's auto-fill, word-limit tailoring, and synthetic event dispatchers.
+  </p>
+
+  <!-- FORM 1: Greenhouse Simple Inputs -->
+  <div class="card">
+    <span class="badge">ATS: Greenhouse Mock Form</span>
+    <h2>General Application Info</h2>
+    <form id="greenhouse-form" onsubmit="handleSubmit(event, 'greenhouse-form')">
+      
+      <div class="form-group">
+        <label for="first_name">First Name</label>
+        <input type="text" id="first_name" name="first_name" placeholder="John" required>
+      </div>
+
+      <div class="form-group">
+        <label for="last_name">Last Name</label>
+        <input type="text" id="last_name" name="last_name" placeholder="Doe" required>
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input type="email" id="email" name="email" placeholder="john.doe@example.com" required>
+      </div>
+
+      <div class="form-group">
+        <label for="phone">Phone Number</label>
+        <input type="text" id="phone" name="phone" placeholder="+1-555-0199" required>
+      </div>
+
+      <div class="form-group">
+        <label for="linkedin">LinkedIn Profile URL</label>
+        <input type="text" id="linkedin" name="linkedin" placeholder="https://linkedin.com/in/username">
+      </div>
+
+      <button type="submit" class="btn">Submit Application</button>
+    </form>
+  </div>
+
+  <!-- FORM 2: React Synthetic State Trap Simulation -->
+  <div class="card">
+    <span class="badge">State Trap Test</span>
+    <h2>React Controlled Input Simulation</h2>
+    <p style="font-size: 0.75rem; color: #94A3B8; margin-bottom: 1rem;">
+      This field simulates a React controlled component. If value is modified programmatically *without* firing proper events, the local component state remains empty, and submitting will cause it to clear out.
+    </p>
+    
+    <form id="react-trap-form" onsubmit="handleReactTrapSubmit(event)">
+      <div class="form-group">
+        <label for="github-trap">GitHub Profile (Controlled)</label>
+        <input type="text" id="github-trap" name="github" placeholder="https://github.com/username">
+        <div id="trap-status" class="state-trap-indicator">Framework State: [Empty]</div>
+      </div>
+      
+      <button type="submit" class="btn">Submit Field</button>
+    </form>
+  </div>
+
+  <!-- FORM 3: Textarea for Project & Word limits -->
+  <div class="card">
+    <span class="badge">Textarea / Projects Carousel / AI Tailoring</span>
+    <h2>Project Accomplishments</h2>
+    <form id="project-form" onsubmit="handleSubmit(event, 'project-form')">
+      
+      <div class="form-group">
+        <label for="project_description">Describe a key technical project you built, listing tech stack and metrics.</label>
+        <textarea id="project_description" name="project_description" rows="6" placeholder="Paste details of your BLE smart glove or Driver drowsiness detector..."></textarea>
+      </div>
+
+      <button type="submit" class="btn">Save Project Details</button>
+    </form>
+  </div>
+
+  <script>
+    // Simulate React internal state
+    let reactState = "";
+    const inputElement = document.getElementById('github-trap');
+    const statusDiv = document.getElementById('trap-status');
+
+    // Setup property setter interception on input to simulate React value binding
+    let internalVal = "";
+    Object.defineProperty(inputElement, 'reactValue', {
+      get() { return internalVal; },
+      set(val) {
+        internalVal = val;
+        statusDiv.textContent = `Framework State: "${val}"`;
+        statusDiv.className = val ? "state-trap-indicator synced" : "state-trap-indicator";
+      }
+    });
+
+    // Listen to native events to sync state
+    inputElement.addEventListener('input', (e) => {
+      inputElement.reactValue = e.target.value;
+    });
+
+    function handleReactTrapSubmit(e) {
+      e.preventDefault();
+      // If native value doesn't match React's internal binding, clear it (React behavior)
+      const val = inputElement.reactValue;
+      if (!val) {
+        alert("FAIL: React internal state was empty! Input cleared.");
+        inputElement.value = "";
+      } else {
+        alert(`SUCCESS: Submitted value "${val}" successfully recognized by framework state!`);
+      }
+    }
+
+    function handleSubmit(e, formId) {
+      e.preventDefault();
+      const form = document.getElementById(formId);
+      const formData = new FormData(form);
+      let output = "";
+      formData.forEach((value, key) => {
+        output += `${key}: ${value}\n`;
+      });
+      alert(`Submitted details:\n\n${output}`);
+    }
+  </script>
+</body>
+</html>
