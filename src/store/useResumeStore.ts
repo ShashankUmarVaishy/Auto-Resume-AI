@@ -31,10 +31,18 @@ export const useResumeStore = create<StoreState>((set, get) => ({
   uploadedDocuments: [],
   
   init: async () => {
-    // Check if chrome API is available (it might not be in some mock/web contexts, so add safe fallback)
     if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
       console.warn('Chrome storage API not available.');
       return;
+    }
+
+    // Configure session storage access level so content scripts (running in untrusted host pages) can read it safely
+    try {
+      if (chrome.storage.session && chrome.storage.session.setAccessLevel) {
+        await chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+      }
+    } catch (e) {
+      // Access level can only be set from popup/options/background scripts, content scripts will throw (safely ignore)
     }
 
     const data = await chrome.storage.local.get([
@@ -42,14 +50,27 @@ export const useResumeStore = create<StoreState>((set, get) => ({
       'resumeProfile',
       'uploadedDocuments'
     ]);
-    
+
+    // Check if the decrypted API key is already unlocked in session storage
+    let sessionApiKey = '';
+    try {
+      if (chrome.storage.session) {
+        const sessionData = await chrome.storage.session.get('apiKey');
+        sessionApiKey = sessionData.apiKey || '';
+      }
+    } catch (e) {
+      // Ignore
+    }
+
     set({
       isPasswordSet: !!data.verifyToken,
+      isLocked: !sessionApiKey,
+      apiKey: sessionApiKey,
       resumeProfile: data.resumeProfile || null,
       uploadedDocuments: data.uploadedDocuments || []
     });
-    
-    // Listen for changes from other extension contexts (e.g. Popup updates key, Options page updates profile)
+
+    // Listen for changes from other contexts (e.g. Popup updates key, Options page updates profile)
     chrome.storage.onChanged.addListener((changes: any, areaName: string) => {
       if (areaName === 'local') {
         const updates: Partial<StoreState> = {};
@@ -67,43 +88,51 @@ export const useResumeStore = create<StoreState>((set, get) => ({
           updates.uploadedDocuments = changes.uploadedDocuments.newValue || [];
         }
         set(updates);
+      } else if (areaName === 'session') {
+        if (changes.apiKey) {
+          const newKey = changes.apiKey.newValue || '';
+          set({
+            apiKey: newKey,
+            isLocked: !newKey
+          });
+        }
       }
     });
   },
-  
+
   setPassword: async (password: string) => {
-    // 1. Create a verification token "VERIFIED" encrypted with the password
     const token = await encryptText('VERIFIED', password);
-    
     await chrome.storage.local.set({
       verifyToken: token
     });
-    
     set({
       isPasswordSet: true,
       isLocked: false
     });
   },
-  
+
   unlock: async (password: string): Promise<boolean> => {
     try {
       const data = await chrome.storage.local.get(['verifyToken', 'encryptedApiKey']);
       if (!data.verifyToken) {
         return false;
       }
-      
-      // Try to decrypt the verification token
+
       const decryptedToken = await decryptText(data.verifyToken, password);
       if (decryptedToken !== 'VERIFIED') {
         return false;
       }
-      
-      // Decrypt API Key if it exists
+
       let decryptedKey = '';
       if (data.encryptedApiKey) {
         decryptedKey = await decryptText(data.encryptedApiKey, password);
       }
-      
+
+      // Persist decrypted key in session memory
+      if (chrome.storage.session) {
+        await chrome.storage.session.set({ apiKey: decryptedKey });
+      }
+
       set({
         isLocked: false,
         apiKey: decryptedKey
@@ -114,24 +143,34 @@ export const useResumeStore = create<StoreState>((set, get) => ({
       return false;
     }
   },
-  
+
   lock: () => {
+    if (chrome.storage.session) {
+      chrome.storage.session.remove('apiKey');
+    }
     set({
       isLocked: true,
       apiKey: ''
     });
   },
-  
+
   saveApiKey: async (key: string, password: string) => {
     const encryptedKey = await encryptText(key, password);
     await chrome.storage.local.set({
       encryptedApiKey: encryptedKey
     });
+    
+    // Save to session memory
+    if (chrome.storage.session) {
+      await chrome.storage.session.set({ apiKey: key });
+    }
+    
     set({
-      apiKey: key
+      apiKey: key,
+      isLocked: false
     });
   },
-  
+
   resetPassword: async () => {
     await chrome.storage.local.remove([
       'verifyToken',
@@ -140,6 +179,10 @@ export const useResumeStore = create<StoreState>((set, get) => ({
       'uploadedDocuments'
     ]);
     
+    if (chrome.storage.session) {
+      await chrome.storage.session.remove('apiKey');
+    }
+
     set({
       isPasswordSet: false,
       isLocked: true,

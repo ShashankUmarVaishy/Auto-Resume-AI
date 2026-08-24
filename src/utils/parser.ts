@@ -1,8 +1,16 @@
 import * as pdfjs from 'pdfjs-dist';
 import * as mammoth from 'mammoth';
 
-// Configure the pdfjs worker to fetch from unpkg using the exact package version
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+declare const chrome: any;
+
+// Configure the pdfjs worker to load locally inside the extension to satisfy CSP
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.getURL) {
+  pdfjs.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('pdf.worker.min.mjs');
+} else {
+  // Fallback for non-extension testing environments
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+}
+
 
 /**
  * Extracts plain text from an uploaded PDF file.

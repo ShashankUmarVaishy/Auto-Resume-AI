@@ -4,7 +4,7 @@ import PopoverElement from './content/PopoverElement';
 import styleText from '../assets/tailwind.css?inline';
 
 export default defineContentScript({
-  matches: ['*://*/*'],
+  matches: ['*://*/*', 'file:///*'],
   cssInjectionMode: 'ui',
   main(ctx) {
     // 1. Create root element for shadow host

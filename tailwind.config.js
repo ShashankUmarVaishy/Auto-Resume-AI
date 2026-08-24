@@ -9,12 +9,12 @@ export default {
   theme: {
     extend: {
       colors: {
-        darkBg: '#090D16',       // Deepest dark blue-grey background
-        darkCard: '#131A26',     // Premium card background
-        darkBorder: '#1E293B',   // Border color
-        accentCyan: '#06B6D4',   // Cyberpunk Cyan
-        accentGreen: '#10B981',  // Success Emerald
-        accentPurple: '#8B5CF6', // Pro Feature Purple
+        darkBg: '#09090B',       // Zinc-950 dark background
+        darkCard: '#18181B',     // Zinc-900 card background
+        darkBorder: '#27272A',   // Zinc-800 border
+        accentCyan: '#FFFFFF',   // Minimalist White
+        accentGreen: '#E4E4E7',  // Light Grey (zinc-200)
+        accentPurple: '#A1A1AA', // Neutral Grey (zinc-400)
       },
       fontFamily: {
         sans: ['Inter', 'sans-serif'],

@@ -49,19 +49,21 @@ export class FieldDetector {
 
     // 2. TIER 1 & 2: MATCH PERSONAL DETAILS
     if (this.matchesKeywords(searchString, ['firstname', 'first name', 'fname', 'givenname'])) {
+      const defaultFirstName = (profile.personalInfo?.fullName || '').split(' ')[0] || '';
       return {
         fieldKey: 'personalInfo.firstName',
         label: 'First Name',
-        value: profile.personalInfo.firstName || profile.personalInfo.fullName.split(' ')[0] || '',
+        value: profile.personalInfo?.firstName || defaultFirstName,
         type: 'text'
       };
     }
 
     if (this.matchesKeywords(searchString, ['lastname', 'last name', 'lname', 'surname', 'familyname'])) {
+      const defaultLastName = (profile.personalInfo?.fullName || '').split(' ').slice(1).join(' ') || '';
       return {
         fieldKey: 'personalInfo.lastName',
         label: 'Last Name',
-        value: profile.personalInfo.lastName || profile.personalInfo.fullName.split(' ').slice(1).join(' '),
+        value: profile.personalInfo?.lastName || defaultLastName,
         type: 'text'
       };
     }
@@ -70,7 +72,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.fullName',
         label: 'Full Name',
-        value: profile.personalInfo.fullName,
+        value: profile.personalInfo?.fullName || '',
         type: 'text'
       };
     }
@@ -79,7 +81,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.email',
         label: 'Email Address',
-        value: profile.personalInfo.email,
+        value: profile.personalInfo?.email || '',
         type: 'text'
       };
     }
@@ -88,7 +90,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.phone',
         label: 'Phone Number',
-        value: profile.personalInfo.phone,
+        value: profile.personalInfo?.phone || '',
         type: 'text'
       };
     }
@@ -97,7 +99,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.urls.linkedin',
         label: 'LinkedIn Profile',
-        value: profile.personalInfo.urls.linkedin,
+        value: profile.personalInfo?.urls?.linkedin || '',
         type: 'text'
       };
     }
@@ -106,7 +108,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.urls.github',
         label: 'GitHub URL',
-        value: profile.personalInfo.urls.github,
+        value: profile.personalInfo?.urls?.github || '',
         type: 'text'
       };
     }
@@ -115,7 +117,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.urls.portfolio',
         label: 'Portfolio Link',
-        value: profile.personalInfo.urls.portfolio,
+        value: profile.personalInfo?.urls?.portfolio || '',
         type: 'text'
       };
     }
@@ -125,7 +127,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.location.city',
         label: 'City',
-        value: profile.personalInfo.location.city,
+        value: profile.personalInfo?.location?.city || '',
         type: 'text'
       };
     }
@@ -134,7 +136,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.location.state',
         label: 'State / Province',
-        value: profile.personalInfo.location.state,
+        value: profile.personalInfo?.location?.state || '',
         type: 'text'
       };
     }
@@ -143,7 +145,7 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.location.country',
         label: 'Country',
-        value: profile.personalInfo.location.country,
+        value: profile.personalInfo?.location?.country || '',
         type: 'text'
       };
     }
@@ -152,16 +154,18 @@ export class FieldDetector {
       return {
         fieldKey: 'personalInfo.location.postalCode',
         label: 'Postal Code',
-        value: profile.personalInfo.location.postalCode || '',
+        value: profile.personalInfo?.location?.postalCode || '',
         type: 'text'
       };
     }
 
     if (this.matchesKeywords(searchString, ['address', 'street', 'addressline'])) {
+      const loc = profile.personalInfo?.location;
+      const computedAddress = loc ? `${loc.city || ''}, ${loc.state || ''}, ${loc.country || ''}` : '';
       return {
         fieldKey: 'personalInfo.location.rawAddress',
         label: 'Street Address',
-        value: profile.personalInfo.location.rawAddress || `${profile.personalInfo.location.city}, ${profile.personalInfo.location.state}, ${profile.personalInfo.location.country}`,
+        value: loc?.rawAddress || computedAddress,
         type: 'text'
       };
     }
@@ -169,70 +173,72 @@ export class FieldDetector {
     // 4. EDUCATION MATCHES (Latest)
     if (profile.education && profile.education.length > 0) {
       const edu = profile.education[0];
-      if (!edu) return null;
-      if (this.matchesKeywords(searchString, ['school', 'university', 'college', 'institution'])) {
-        return {
-          fieldKey: 'education.institution',
-          label: 'Institution',
-          value: edu.institution,
-          type: 'text'
-        };
-      }
-      if (this.matchesKeywords(searchString, ['degree', 'qualification'])) {
-        return {
-          fieldKey: 'education.degree',
-          label: 'Degree',
-          value: edu.degree,
-          type: 'text'
-        };
-      }
-      if (this.matchesKeywords(searchString, ['major', 'fieldofstudy', 'discipline', 'subject'])) {
-        return {
-          fieldKey: 'education.fieldOfStudy',
-          label: 'Field of Study',
-          value: edu.fieldOfStudy,
-          type: 'text'
-        };
-      }
-      if (this.matchesKeywords(searchString, ['gpa', 'grades', 'cumulative gpa'])) {
-        return {
-          fieldKey: 'education.gpa',
-          label: 'GPA',
-          value: edu.gpa,
-          type: 'text'
-        };
+      if (edu) {
+        if (this.matchesKeywords(searchString, ['school', 'university', 'college', 'institution'])) {
+          return {
+            fieldKey: 'education.institution',
+            label: 'Institution',
+            value: edu.institution || '',
+            type: 'text'
+          };
+        }
+        if (this.matchesKeywords(searchString, ['degree', 'qualification'])) {
+          return {
+            fieldKey: 'education.degree',
+            label: 'Degree',
+            value: edu.degree || '',
+            type: 'text'
+          };
+        }
+        if (this.matchesKeywords(searchString, ['major', 'fieldofstudy', 'discipline', 'subject'])) {
+          return {
+            fieldKey: 'education.fieldOfStudy',
+            label: 'Field of Study',
+            value: edu.fieldOfStudy || '',
+            type: 'text'
+          };
+        }
+        if (this.matchesKeywords(searchString, ['gpa', 'grades', 'cumulative gpa'])) {
+          return {
+            fieldKey: 'education.gpa',
+            label: 'GPA',
+            value: edu.gpa || '',
+            type: 'text'
+          };
+        }
       }
     }
 
     // 5. WORK EXPERIENCE MATCHES (Latest Role Details)
     if (profile.workExperience && profile.workExperience.length > 0) {
       const work = profile.workExperience[0];
-      if (!work) return null;
-      if (this.matchesKeywords(searchString, ['company', 'employer'])) {
-        return {
-          fieldKey: 'workExperience.company',
-          label: 'Company',
-          value: work.company,
-          type: 'text'
-        };
-      }
-      if (this.matchesKeywords(searchString, ['jobtitle', 'job title', 'role', 'position'])) {
-        return {
-          fieldKey: 'workExperience.role',
-          label: 'Job Title',
-          value: work.role,
-          type: 'text'
-        };
+      if (work) {
+        if (this.matchesKeywords(searchString, ['company', 'employer'])) {
+          return {
+            fieldKey: 'workExperience.company',
+            label: 'Company',
+            value: work.company || '',
+            type: 'text'
+          };
+        }
+        if (this.matchesKeywords(searchString, ['jobtitle', 'job title', 'role', 'position'])) {
+          return {
+            fieldKey: 'workExperience.role',
+            label: 'Job Title',
+            value: work.role || '',
+            type: 'text'
+          };
+        }
       }
     }
 
     // 6. SKILLS
     if (this.matchesKeywords(searchString, ['skills', 'technologies', 'corecompetencies'])) {
-      const allSkills = [
-        ...profile.skills.languages,
-        ...profile.skills.frameworks,
-        ...profile.skills.toolsAndPlatforms
-      ].join(', ');
+      const languages = profile.skills?.languages || [];
+      const frameworks = profile.skills?.frameworks || [];
+      const tools = profile.skills?.toolsAndPlatforms || [];
+      const allSkills = [...languages, ...frameworks, ...tools].join(', ');
+      
       return {
         fieldKey: 'skills',
         label: 'Skills',
@@ -249,8 +255,8 @@ export class FieldDetector {
           return {
             fieldKey: `customSnippets.${snip.label}`,
             label: `QA: ${snip.label}`,
-            value: snip.content,
-            type: snip.content.length > 100 ? 'textarea' : 'text'
+            value: snip.content || '',
+            type: (snip.content || '').length > 100 ? 'textarea' : 'text'
           };
         }
       }

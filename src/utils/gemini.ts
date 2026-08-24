@@ -119,7 +119,7 @@ const GEMINI_SCHEMA = {
  * Invokes Gemini 1.5 Flash to extract structured resume details from raw text.
  */
 export async function parseResumeWithAI(rawText: string, apiKey: string): Promise<MasterResumeProfile> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
   
   const systemInstruction = 
     `You are an expert system that extracts structured resume data from unstructured text. 
@@ -177,7 +177,7 @@ export async function tailorTextWithAI(
   contextPrompt: string,
   apiKey: string
 ): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
   const systemInstruction = 
     `You are a professional CV editor.

@@ -70,8 +70,12 @@ export default function PopoverElement() {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       
-      // Since our UI is inside a closed shadow root, target will be the shadow host
-      // so we check if the path or active click was processed inside our popover
+      // Since our UI is inside a closed shadow root, any click inside it is retargeted to the shadow host.
+      // We ignore these to prevent the popover from closing prematurely before button actions run.
+      if (target && target.id === 'autoresume-host') {
+        return;
+      }
+      
       if (showPopover && popoverRef.current && !popoverRef.current.contains(target) && target !== activeEl) {
         setShowPopover(false);
       }
