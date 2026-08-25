@@ -28,8 +28,10 @@ export default function PopoverElement() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // Project carousel states
+  // Project & Experience carousel states
+  const [carouselTab, setCarouselTab] = useState<'projects' | 'experience'>('projects');
   const [activeProjectIdx, setActiveProjectIdx] = useState(0);
+  const [activeExperienceIdx, setActiveExperienceIdx] = useState(0);
 
   // Keep references to components to handle outside clicks
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -182,19 +184,31 @@ export default function PopoverElement() {
 
   // Instant Tailoring: runs client-side Gemini or local truncation fallback
   const handleInstantTailoring = async (wordLimit: number) => {
-    const projects = store.resumeProfile?.projects || [];
-    if (projects.length === 0) return;
-    
-    const activeProject = projects[activeProjectIdx];
-    if (!activeProject) return;
-    const sourceText = activeProject.description;
-    
+    let sourceText = '';
+    let context = '';
+
+    if (detectedMatch?.type === 'project_selector') {
+      const projects = store.resumeProfile?.projects || [];
+      if (projects.length === 0) return;
+      const activeProject = projects[activeProjectIdx];
+      if (!activeProject) return;
+      sourceText = `${activeProject.description || ''}\n${(activeProject.highlights || []).map(h => `- ${h}`).join('\n')}`.trim();
+      context = `Highlight tech stack: ${activeProject.techStack.join(', ')}`;
+    } else {
+      const experienceList = store.resumeProfile?.workExperience || [];
+      if (experienceList.length === 0) return;
+      const activeExperience = experienceList[activeExperienceIdx];
+      if (!activeExperience) return;
+      sourceText = `${activeExperience.shortSummary || ''}\n${(activeExperience.responsibilities || []).map(r => `- ${r}`).join('\n')}`.trim();
+      context = `Role: ${activeExperience.role} at ${activeExperience.company}. Highlight tech stack: ${(activeExperience.techStack || []).join(', ')}`;
+    }
+
+    if (!sourceText) return;
     setTailoringLoading(true);
     
     try {
       if (store.apiKey) {
         // AI Tailoring
-        const context = `Highlight tech stack: ${activeProject.techStack.join(', ')}`;
         const tailoredText = await tailorTextWithAI(sourceText, wordLimit, context, store.apiKey);
         handleAutofill(tailoredText);
       } else {
@@ -399,6 +413,144 @@ export default function PopoverElement() {
                   </div>
                 </div>
               )}
+
+              {/* Work Experience Manual Fields */}
+              {store.resumeProfile?.workExperience && store.resumeProfile.workExperience.length > 0 && (
+                <div className="space-y-1.5 pt-1.5 border-t border-darkBorder/40">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold block">Work Experience</span>
+                  <div className="space-y-2">
+                    {store.resumeProfile.workExperience.map((work, idx) => (
+                      <div key={work.id || idx} className="bg-slate-850 p-2 rounded border border-darkBorder/60">
+                        <span className="text-[9px] font-bold text-accentCyan block mb-1 truncate">{work.company} ({work.role})</span>
+                        <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                          <button
+                            onClick={() => { handleAutofill(work.company); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Company Name
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(work.role); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Role Title
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(work.location || ''); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Location
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(`${work.startDate} - ${work.endDate}`); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Duration
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(work.shortSummary || ''); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer col-span-2"
+                          >
+                            Short Summary
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill((work.responsibilities || []).map(r => `• ${r}`).join('\n')); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer col-span-2"
+                          >
+                            Responsibilities List
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Projects Manual Fields */}
+              {store.resumeProfile?.projects && store.resumeProfile.projects.length > 0 && (
+                <div className="space-y-1.5 pt-1.5 border-t border-darkBorder/40">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold block">Projects</span>
+                  <div className="space-y-2">
+                    {store.resumeProfile.projects.map((proj, idx) => (
+                      <div key={proj.id || idx} className="bg-slate-850 p-2 rounded border border-darkBorder/60">
+                        <span className="text-[9px] font-bold text-accentCyan block mb-1 truncate">{proj.name}</span>
+                        <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                          <button
+                            onClick={() => { handleAutofill(proj.name); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Project Name
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(proj.techStack.join(', ')); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Tech Stack
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(proj.description); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer col-span-2"
+                          >
+                            Description
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Education Manual Fields */}
+              {store.resumeProfile?.education && store.resumeProfile.education.length > 0 && (
+                <div className="space-y-1.5 pt-1.5 border-t border-darkBorder/40">
+                  <span className="text-[9px] text-slate-500 uppercase font-semibold block">Education</span>
+                  <div className="space-y-2">
+                    {store.resumeProfile.education.map((edu, idx) => (
+                      <div key={idx} className="bg-slate-850 p-2 rounded border border-darkBorder/60">
+                        <span className="text-[9px] font-bold text-accentCyan block mb-1 truncate">{edu.institution}</span>
+                        <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                          <button
+                            onClick={() => { handleAutofill(edu.institution); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Institution
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(edu.degree); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Degree
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(edu.fieldOfStudy); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            Field of Study
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill(edu.gpa); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer"
+                          >
+                            GPA
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill((edu.coursework || []).join(', ')); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer col-span-2"
+                          >
+                            Coursework
+                          </button>
+                          <button
+                            onClick={() => { handleAutofill((edu.honors || []).join(', ')); setShowManualSelect(false); }}
+                            className="text-left bg-slate-800 hover:bg-slate-700 p-1 rounded truncate text-slate-300 cursor-pointer col-span-2"
+                          >
+                            Honors & Awards
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : detectedMatch.type === 'project_selector' ? (
             <div>
@@ -406,8 +558,9 @@ export default function PopoverElement() {
                 const projects = store.resumeProfile?.projects || [];
                 const activeProject = projects[activeProjectIdx];
                 if (projects.length === 0 || !activeProject) {
-                  return <p className="text-xs text-slate-400 text-center py-2">No projects found. Add them in options!</p>;
+                  return <p className="text-xs text-slate-400 text-center py-4">No projects found. Add them in options!</p>;
                 }
+                const projectRawText = `${activeProject.description || ''}\n${(activeProject.highlights || []).map(h => `• ${h}`).join('\n')}`.trim();
                 return (
                   <div>
                     {/* Carousel selector */}
@@ -423,7 +576,7 @@ export default function PopoverElement() {
                         <span className="text-xs font-bold text-slate-200 block truncate">
                           {activeProject.name}
                         </span>
-                        <span className="text-[9px] text-slate-400">
+                        <span className="text-[9px] text-slate-400 font-medium">
                           Project {activeProjectIdx + 1} of {projects.length}
                         </span>
                       </div>
@@ -443,8 +596,13 @@ export default function PopoverElement() {
 
                     {/* Character/Word-limit tailoring buttons */}
                     <div className="border-t border-darkBorder/40 pt-2 mb-3">
-                      <span className="text-[9px] text-slate-400 uppercase font-semibold block mb-1.5">
-                        Tailor description to limit:
+                      <span className="text-[9px] text-slate-400 uppercase font-semibold block mb-1.5 flex justify-between">
+                        <span>Tailor description to limit:</span>
+                        {store.apiKey ? (
+                          <span className="text-accentCyan font-normal lowercase">(Gemini AI Active)</span>
+                        ) : (
+                          <span className="text-red-400 font-normal lowercase">(Local fallback - locked)</span>
+                        )}
                       </span>
                       <div className="grid grid-cols-3 gap-1 text-center">
                         <button
@@ -474,7 +632,7 @@ export default function PopoverElement() {
                     {/* Standard fill options for current project description */}
                     <div className="flex space-x-2 pt-2 border-t border-darkBorder">
                       <button
-                        onClick={() => handleAutofill(activeProject.description)}
+                        onClick={() => handleAutofill(projectRawText)}
                         disabled={tailoringLoading}
                         className="flex-1 bg-accentCyan hover:bg-cyan-500 disabled:opacity-50 text-darkBg font-bold py-1.5 rounded text-xs cursor-pointer flex items-center justify-center space-x-1.5"
                       >
@@ -482,25 +640,136 @@ export default function PopoverElement() {
                         <span>{tailoringLoading ? 'Rewriting...' : 'Autofill Raw'}</span>
                       </button>
                       <button
-                        onClick={() => handleCopyToClipboard(activeProject.description)}
+                        onClick={() => handleCopyToClipboard(projectRawText)}
                         className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-darkBorder rounded cursor-pointer text-slate-300"
                         title="Copy to clipboard"
                       >
                         {copied ? <Check className="w-4 h-4 text-accentGreen" /> : <Clipboard className="w-4 h-4" />}
                       </button>
                     </div>
+                  </div>
+                );
+              })()}
 
-                    <div className="mt-2.5 pt-1.5 border-t border-darkBorder/40 text-center">
+              <div className="mt-2.5 pt-1.5 border-t border-darkBorder/40 text-center">
+                <button
+                  onClick={() => setShowManualSelect(true)}
+                  className="text-[9px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  🔍 Select field manually...
+                </button>
+              </div>
+            </div>
+          ) : detectedMatch.type === 'experience_selector' ? (
+            <div>
+              {(() => {
+                const experiences = store.resumeProfile?.workExperience || [];
+                const activeExperience = experiences[activeExperienceIdx];
+                if (experiences.length === 0 || !activeExperience) {
+                  return <p className="text-xs text-slate-400 text-center py-4">No experiences found. Add them in options!</p>;
+                }
+                const experienceRawText = `${activeExperience.shortSummary || ''}\n${(activeExperience.responsibilities || []).map(r => `• ${r}`).join('\n')}`.trim();
+                return (
+                  <div>
+                    {/* Carousel selector */}
+                    <div className="flex items-center justify-between bg-darkBg/60 p-2.5 rounded-lg border border-darkBorder mb-3">
                       <button
-                        onClick={() => setShowManualSelect(true)}
-                        className="text-[9px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                        onClick={() => setActiveExperienceIdx(prev => Math.max(0, prev - 1))}
+                        disabled={activeExperienceIdx === 0}
+                        className="p-1 disabled:opacity-30 hover:bg-slate-800 rounded cursor-pointer"
                       >
-                        🔍 Select field manually...
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <div className="text-center flex-1 mx-2">
+                        <span className="text-xs font-bold text-slate-200 block truncate">
+                          {activeExperience.company}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-medium block truncate">
+                          {activeExperience.role}
+                        </span>
+                        <span className="text-[8px] text-slate-500 font-normal">
+                          Experience {activeExperienceIdx + 1} of {experiences.length}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setActiveExperienceIdx(prev => Math.min(experiences.length - 1, prev + 1))}
+                        disabled={activeExperienceIdx === experiences.length - 1}
+                        className="p-1 disabled:opacity-30 hover:bg-slate-800 rounded cursor-pointer"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Tech stack highlight */}
+                    <div className="text-[10px] text-accentCyan mb-2 font-mono truncate">
+                      Stack: {(activeExperience.techStack || []).join(', ') || 'N/A'}
+                    </div>
+
+                    {/* Character/Word-limit tailoring buttons */}
+                    <div className="border-t border-darkBorder/40 pt-2 mb-3">
+                      <span className="text-[9px] text-slate-400 uppercase font-semibold block mb-1.5 flex justify-between">
+                        <span>Tailor summary to limit:</span>
+                        {store.apiKey ? (
+                          <span className="text-accentCyan font-normal lowercase">(Gemini AI Active)</span>
+                        ) : (
+                          <span className="text-red-400 font-normal lowercase">(Local fallback - locked)</span>
+                        )}
+                      </span>
+                      <div className="grid grid-cols-3 gap-1 text-center">
+                        <button
+                          onClick={() => handleInstantTailoring(100)}
+                          disabled={tailoringLoading}
+                          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-[10px] py-1.5 rounded cursor-pointer font-medium"
+                        >
+                          100 words
+                        </button>
+                        <button
+                          onClick={() => handleInstantTailoring(250)}
+                          disabled={tailoringLoading}
+                          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-[10px] py-1.5 rounded cursor-pointer font-medium"
+                        >
+                          250 words
+                        </button>
+                        <button
+                          onClick={() => handleInstantTailoring(500)}
+                          disabled={tailoringLoading}
+                          className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-[10px] py-1.5 rounded cursor-pointer font-medium"
+                        >
+                          500 words
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Standard fill options for current work description */}
+                    <div className="flex space-x-2 pt-2 border-t border-darkBorder">
+                      <button
+                        onClick={() => handleAutofill(experienceRawText)}
+                        disabled={tailoringLoading}
+                        className="flex-1 bg-accentCyan hover:bg-cyan-500 disabled:opacity-50 text-darkBg font-bold py-1.5 rounded text-xs cursor-pointer flex items-center justify-center space-x-1.5"
+                      >
+                        {tailoringLoading && <RefreshCw className="w-3 h-3 animate-spin" />}
+                        <span>{tailoringLoading ? 'Rewriting...' : 'Autofill Raw'}</span>
+                      </button>
+                      <button
+                        onClick={() => handleCopyToClipboard(experienceRawText)}
+                        className="p-1.5 bg-slate-800 hover:bg-slate-700 border border-darkBorder rounded cursor-pointer text-slate-300"
+                        title="Copy to clipboard"
+                      >
+                        {copied ? <Check className="w-4 h-4 text-accentGreen" /> : <Clipboard className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
                 );
               })()}
+
+              <div className="mt-2.5 pt-1.5 border-t border-darkBorder/40 text-center">
+                <button
+                  onClick={() => setShowManualSelect(true)}
+                  className="text-[9px] text-slate-400 hover:text-white transition-colors cursor-pointer"
+                >
+                  🔍 Select field manually...
+                </button>
+              </div>
             </div>
           ) : (
             /* STANDARD TEXT/SELECT FIELD VIEW */

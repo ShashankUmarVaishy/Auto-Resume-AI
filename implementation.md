@@ -6,23 +6,23 @@ This document details the system design, core components, data flows, and local 
 
 ## 1. System Components Architecture
 
-The extension is divided into two execution planes: the **Ingestion/Storage Control Plane** (where the user manages their files and keys) and the **Runtime DOM Interaction Plane** (where the extension injects buttons and inputs data into job boards).
+The extension is divided into two execution planes: the **Ingestion/Storage Control Plane** (where the user manages their files, decryption passwords, and API keys) and the **Runtime DOM Interaction Plane** (where the content scripts detect fields, render carousels, and inject data into job boards).
 
 ```mermaid
 graph TD
     subgraph INGESTION & STORAGE PLANE
         U[PDF/DOCX Resume] -->|File Upload| PE[Parser Engine: pdf.js & mammoth]
-        PE -->|Raw Text Stream| GC[Gemini AI Client]
+        PE -->|Raw Text Stream| GC[Gemini AI Client: gemini-1.5-flash]
         GC -->|OpenAPI JSON Schema| ZS[Zustand Store]
-        ZS -->|AES-256 Encrypted Sync| CS[(chrome.storage.local)]
+        ZS -->|AES-GCM-256 Encrypted Sync| CS[(chrome.storage.local)]
     end
 
     subgraph RUNTIME DOM PLANE
-        JB[Job Portal: Workday / Greenhouse] -->|Focus In Event| CSG[Content Script Shadow DOM]
-        CSG -->|Element ID/Name/Labels| FD[Heuristic Field Detector]
+        JB[Job Portal / Google Form] -->|Focus In Event| CSG[Content Script Shadow DOM]
+        CSG -->|Element ID/Name/Labels/ARIA| FD[Heuristic Field Detector]
         ZS -.->|Sync Active Profile| FD
         FD -->|Classify Field Match| CSG
-        CSG -->| autfill | INJ[React/Vue State Bypass Injector]
+        CSG -->| autofill / tailor | INJ[React/Vue State Bypass Injector]
         INJ -->|Update DOM Element| JB
     end
 ```
@@ -36,23 +36,28 @@ AutoResume AI operates across five separate processing layers:
 ### Layer 1: Client-Side Document Extraction
 *   **PDF Ingestion**: `pdfjs-dist` loads the PDF as an array buffer. The worker streams text tokens from individual page elements.
 *   **DOCX Ingestion**: `mammoth.js` extracts raw paragraph texts from the open-xml structure in memory.
-*   *Note*: Files are parsed completely inside the browser; raw files are never transmitted to any server.
+*   *Note*: Files are parsed completely inside the browser; raw files are never transmitted to any third-party backend servers.
 
 ### Layer 2: Schema Extraction & JSON Normalization
-*   The raw text is bundled into an instruction prompt.
-*   We call Gemini 1.5 Flash, enforcing an exact JSON structure mirroring our TypeScript interface `MasterResumeProfile` via `generationConfig.responseSchema`. This guarantees structured extraction without hallucinations.
+*   The raw extracted text is bundled into an instruction prompt and sent to Google's official Gemini endpoint.
+*   We query **Gemini 1.5 Flash**, enforcing an exact JSON structure mirroring our TypeScript interface `MasterResumeProfile` via `generationConfig.responseSchema`. 
+*   **Segregation Rules**: The extraction prompt enforces strict rules to prevent mixing work experience (organizational employment) and projects (personal/academic/open-source achievements), ensuring structured normalization.
 
-### Layer 3: Heuristic Classification (Tiers 1-4)
-When an input field receives focus, the `FieldDetector` executes:
-1.  **Tier 1 (Explicit attributes)**: Checks `name`, `id`, `autocomplete`, `data-automation-id`, and `placeholder`.
-2.  **Tier 2 (Labels)**: Searches the DOM for associated `<label>` tags or surrounding container headers.
-3.  **Tier 3 (Proximity)**: Classifies visual sibling text nodes within a vertical bounding box.
-4.  **Tier 4 (Fallback)**: Matches custom snippets or triggers textarea selectors (activating the projects carousel).
+### Layer 3: Heuristic Classification & ARIA Extraction
+When an input field receives focus, the `FieldDetector` evaluates it:
+1.  **Tier 1 (Explicit attributes)**: Checks standard attributes like `name`, `id`, `autocomplete`, `data-automation-id`, and `placeholder`.
+2.  **Tier 2 (Accessibility & ARIA)**: Traces `aria-labelledby` IDs (querying referenced elements in the DOM) or direct `aria-label` tags. This ensures compatibility with complex layouts like Google Forms and modern ATS portals.
+3.  **Tier 3 (Labels)**: Searches the DOM for associated `<label>` tags or surrounding container headers.
+4.  **Tier 4 (Proximity)**: Classifies visual sibling text nodes within a vertical bounding box.
+5.  **Tier 5 (Fallback)**: Returns fallback flags for manual selections or textarea carousels.
 
-### Layer 4: Floating closed Shadow DOM Injection
+### Layer 4: Contextual Floating closed Shadow DOM Injection
 *   The content script injects a closed Shadow Root `attachShadow({ mode: 'closed' })` onto the webpage.
-*   Tailwind CSS stylesheet contents are imported as inline strings (`tailwind.css?inline`) and appended inside the shadow root. This ensures styling is isolated from host page stylesheet definitions.
-*   The popover widget renders floating next to the input, responding to focus, scroll, and window resize events.
+*   Tailwind CSS styles are imported as inline strings (`tailwind.css?inline`) and appended inside the shadow root, preventing styles from leaking or interfering with the job portal.
+*   **Semantic Carousels**:
+    *   Focusing a project description textarea activates the **Projects Carousel** showing project cards.
+    *   Focusing a work description textarea activates the **Work Experience Carousel** showing company/role details.
+    *   Both carousels fetch rich details (combining summaries and highlights) and pass them to **Gemini 1.5 Flash** to perform pointwise tailoring (100, 250, 500 words).
 
 ### Layer 5: Framework State-Bypass Injection
 *   ATS job forms built on React, Vue, or Angular intercept standard `.value` changes. Setting `input.value = 'john@example.com'` directly fails because the framework's internal virtual DOM does not trigger its state listeners.
@@ -104,3 +109,4 @@ sequenceDiagram
 2.  **Volatile Memory Lifecycle**: When the extension locks or closes, the plaintext key is completely cleared from memory.
 3.  **Military-Grade Encryption**: The key is stored on disk encrypted using **AES-GCM (256-bit)**, which is computationally infeasible to decrypt without your master password.
 4.  **Local Wipe Control**: If you suspect key exposure, clicking "Permanently Wipe Extension Storage" instantly deletes all verification tokens, resumes, profiles, and keys from Chrome's database.
+5.  **Access Permission Level**: During startup, the background service worker `background.ts` initializes the store and sets Chrome's session storage access level to `TRUSTED_AND_UNTRUSTED_CONTEXTS`. This allows content scripts to read the decrypted key *only* while the session is unlocked.

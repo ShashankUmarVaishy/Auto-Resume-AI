@@ -4,7 +4,7 @@ export interface FieldMatch {
   fieldKey: string;     // e.g. 'personalInfo.email', 'projects', 'skills'
   label: string;        // Human-readable field label
   value: string;        // Suggested text value (or fallback string)
-  type: 'text' | 'textarea' | 'select' | 'project_selector';
+  type: 'text' | 'textarea' | 'select' | 'project_selector' | 'experience_selector';
 }
 
 export class FieldDetector {
@@ -61,15 +61,31 @@ export class FieldDetector {
   }
 
   private static runRules(searchString: string, isTextArea: boolean, profile: MasterResumeProfile): FieldMatch | null {
-    // 1. PROJECT CAROUSEL DETECT (for textareas relating to projects, descriptions, or accomplishments)
+    // 1. WORK EXPERIENCE CAROUSEL DETECT (for textareas relating to work experience or job roles)
+    if (isTextArea && (
+      searchString.includes('experience') || 
+      searchString.includes('work') || 
+      searchString.includes('job') ||
+      searchString.includes('employer') ||
+      searchString.includes('employment') ||
+      searchString.includes('duty') ||
+      searchString.includes('responsibilit')
+    )) {
+      return {
+        fieldKey: 'workExperience',
+        label: 'Select Work Experience',
+        value: '',
+        type: 'experience_selector'
+      };
+    }
+
+    // 2. PROJECT CAROUSEL DETECT (for textareas relating to projects or accomplishments)
     if (isTextArea && (
       searchString.includes('project') || 
       searchString.includes('describe') || 
       searchString.includes('accomplish') || 
       searchString.includes('bullet') || 
-      searchString.includes('experience') || 
-      searchString.includes('portfolio') ||
-      searchString.includes('work')
+      searchString.includes('portfolio')
     )) {
       return {
         fieldKey: 'projects',
@@ -303,8 +319,28 @@ export class FieldDetector {
 
   /**
    * Tier 2 Helper: Traverse DOM to extract label text corresponding to target input.
+   * Leverages ARIA attributes (aria-labelledby, aria-label) to capture labels on modern forms
+   * such as Google Forms, Workday, and custom frameworks.
    */
   private static getAssociatedLabelText(input: HTMLInputElement | HTMLTextAreaElement): string {
+    // 1. Accessibility Check: aria-labelledby (Crucial for Google Forms)
+    const ariaLabelledBy = input.getAttribute('aria-labelledby');
+    if (ariaLabelledBy) {
+      const ids = ariaLabelledBy.split(/\s+/);
+      const labelText = ids
+        .map(id => document.getElementById(id)?.textContent?.trim() || '')
+        .filter(Boolean)
+        .join(' ');
+      if (labelText) return labelText;
+    }
+
+    // 2. Accessibility Check: direct aria-label
+    const ariaLabel = input.getAttribute('aria-label');
+    if (ariaLabel) {
+      return ariaLabel.trim();
+    }
+
+    // 3. ID-linked label
     if (input.id) {
       const label = document.querySelector(`label[for="${input.id}"]`);
       if (label && label.textContent) {
@@ -312,6 +348,7 @@ export class FieldDetector {
       }
     }
 
+    // 4. Parent/Sibling DOM label traversal
     let parent = input.parentElement;
     while (parent) {
       if (parent.tagName.toLowerCase() === 'label') {

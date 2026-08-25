@@ -775,6 +775,399 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Work Experience Card */}
+                <div className="bg-darkCard border border-darkBorder rounded-xl p-6">
+                  <div className="flex justify-between items-center border-b border-darkBorder pb-2 mb-4">
+                    <h3 className="text-sm font-bold text-accentCyan uppercase tracking-widest">
+                      Work Experience
+                    </h3>
+                    <button
+                      onClick={() => {
+                        const updated = { ...editedProfile };
+                        updated.workExperience = [...(updated.workExperience || [])];
+                        updated.workExperience.push({
+                          id: `work-${Date.now()}`,
+                          company: 'New Company',
+                          role: 'Job Title',
+                          location: '',
+                          startDate: '',
+                          endDate: '',
+                          isCurrent: false,
+                          responsibilities: [],
+                          shortSummary: '',
+                          techStack: []
+                        });
+                        setEditedProfile(updated);
+                      }}
+                      className="text-xs bg-slate-800 text-accentCyan hover:bg-slate-700 px-2 py-1 rounded flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Experience</span>
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {(editedProfile.workExperience || []).map((work, idx) => (
+                      <div key={work.id} className="border border-darkBorder bg-darkBg/40 p-4 rounded-lg">
+                        <div className="flex justify-between items-center mb-3">
+                          <input
+                            type="text"
+                            value={work.company}
+                            placeholder="Company Name"
+                            onChange={(e) => {
+                              const updated = { ...editedProfile };
+                              updated.workExperience = [...(updated.workExperience || [])];
+                              if (updated.workExperience[idx]) {
+                                updated.workExperience[idx] = { ...updated.workExperience[idx], company: e.target.value };
+                                setEditedProfile(updated);
+                              }
+                            }}
+                            className="bg-transparent border-b border-transparent hover:border-slate-700 focus:border-accentCyan text-sm font-semibold text-slate-200 outline-none w-1/2"
+                          />
+                          <button
+                            onClick={() => {
+                              const updated = { ...editedProfile };
+                              updated.workExperience = (updated.workExperience || []).filter((_, i) => i !== idx);
+                              setEditedProfile(updated);
+                            }}
+                            className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                          >
+                            <Trash className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4 mb-2">
+                          <div>
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Job Title</label>
+                            <input
+                              type="text"
+                              value={work.role}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.workExperience = [...(updated.workExperience || [])];
+                                if (updated.workExperience[idx]) {
+                                  updated.workExperience[idx] = { ...updated.workExperience[idx], role: e.target.value };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Location</label>
+                            <input
+                              type="text"
+                              placeholder="City, State / Remote"
+                              value={work.location}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.workExperience = [...(updated.workExperience || [])];
+                                if (updated.workExperience[idx]) {
+                                  updated.workExperience[idx] = { ...updated.workExperience[idx], location: e.target.value };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Start Date</label>
+                              <input
+                                type="text"
+                                placeholder="MM/YYYY"
+                                value={work.startDate}
+                                onChange={(e) => {
+                                  const updated = { ...editedProfile };
+                                  updated.workExperience = [...(updated.workExperience || [])];
+                                  if (updated.workExperience[idx]) {
+                                    updated.workExperience[idx] = { ...updated.workExperience[idx], startDate: e.target.value };
+                                    setEditedProfile(updated);
+                                  }
+                                }}
+                                className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">End Date</label>
+                              <input
+                                type="text"
+                                placeholder="MM/YYYY or Present"
+                                value={work.endDate}
+                                onChange={(e) => {
+                                  const updated = { ...editedProfile };
+                                  updated.workExperience = [...(updated.workExperience || [])];
+                                  if (updated.workExperience[idx]) {
+                                    updated.workExperience[idx] = { ...updated.workExperience[idx], endDate: e.target.value };
+                                    setEditedProfile(updated);
+                                  }
+                                }}
+                                className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2 pt-4">
+                            <input
+                              type="checkbox"
+                              id={`current-${work.id}`}
+                              checked={work.isCurrent}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.workExperience = [...(updated.workExperience || [])];
+                                if (updated.workExperience[idx]) {
+                                  updated.workExperience[idx] = { ...updated.workExperience[idx], isCurrent: e.target.checked };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="bg-darkBg border-darkBorder text-accentCyan focus:ring-0 rounded"
+                            />
+                            <label htmlFor={`current-${work.id}`} className="text-[10px] text-slate-400 uppercase font-semibold cursor-pointer">Current Role</label>
+                          </div>
+                        </div>
+                        <div className="mb-2">
+                          <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Short Summary</label>
+                          <textarea
+                            rows={2}
+                            value={work.shortSummary}
+                            onChange={(e) => {
+                              const updated = { ...editedProfile };
+                              updated.workExperience = [...(updated.workExperience || [])];
+                              if (updated.workExperience[idx]) {
+                                updated.workExperience[idx] = { ...updated.workExperience[idx], shortSummary: e.target.value };
+                                setEditedProfile(updated);
+                              }
+                            }}
+                            className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                          />
+                        </div>
+                        <div className="mb-2">
+                          <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Key Responsibilities (One per line)</label>
+                          <textarea
+                            rows={4}
+                            value={(work.responsibilities || []).join('\n')}
+                            onChange={(e) => {
+                              const updated = { ...editedProfile };
+                              updated.workExperience = [...(updated.workExperience || [])];
+                              if (updated.workExperience[idx]) {
+                                updated.workExperience[idx] = { 
+                                  ...updated.workExperience[idx], 
+                                  responsibilities: e.target.value.split('\n').map(s => s.trim()).filter(Boolean) 
+                                };
+                                setEditedProfile(updated);
+                              }
+                            }}
+                            className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs font-mono text-slate-200 outline-none"
+                            placeholder="Developed REST APIs using Node.js&#10;Led team of 4 engineers"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Tech Stack (comma separated)</label>
+                          <input
+                            type="text"
+                            value={(work.techStack || []).join(', ')}
+                            onChange={(e) => {
+                              const updated = { ...editedProfile };
+                              updated.workExperience = [...(updated.workExperience || [])];
+                              if (updated.workExperience[idx]) {
+                                updated.workExperience[idx] = { 
+                                  ...updated.workExperience[idx], 
+                                  techStack: e.target.value.split(',').map(s => s.trim()).filter(Boolean) 
+                                };
+                                setEditedProfile(updated);
+                              }
+                            }}
+                            className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Education Card */}
+                <div className="bg-darkCard border border-darkBorder rounded-xl p-6">
+                  <div className="flex justify-between items-center border-b border-darkBorder pb-2 mb-4">
+                    <h3 className="text-sm font-bold text-accentCyan uppercase tracking-widest">
+                      Education
+                    </h3>
+                    <button
+                      onClick={() => {
+                        const updated = { ...editedProfile };
+                        updated.education = [...(updated.education || [])];
+                        updated.education.push({
+                          institution: 'New University',
+                          degree: 'Degree',
+                          fieldOfStudy: 'Major',
+                          gpa: '',
+                          startDate: '',
+                          endDate: '',
+                          coursework: [],
+                          honors: []
+                        });
+                        setEditedProfile(updated);
+                      }}
+                      className="text-xs bg-slate-800 text-accentCyan hover:bg-slate-700 px-2 py-1 rounded flex items-center space-x-1 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Education</span>
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {(editedProfile.education || []).map((edu, idx) => (
+                      <div key={idx} className="border border-darkBorder bg-darkBg/40 p-4 rounded-lg">
+                        <div className="flex justify-between items-center mb-3">
+                          <input
+                            type="text"
+                            value={edu.institution}
+                            placeholder="Institution"
+                            onChange={(e) => {
+                              const updated = { ...editedProfile };
+                              updated.education = [...(updated.education || [])];
+                              if (updated.education[idx]) {
+                                updated.education[idx] = { ...updated.education[idx], institution: e.target.value };
+                                setEditedProfile(updated);
+                              }
+                            }}
+                            className="bg-transparent border-b border-transparent hover:border-slate-700 focus:border-accentCyan text-sm font-semibold text-slate-200 outline-none w-1/2"
+                          />
+                          <button
+                            onClick={() => {
+                              const updated = { ...editedProfile };
+                              updated.education = (updated.education || []).filter((_, i) => i !== idx);
+                              setEditedProfile(updated);
+                            }}
+                            className="text-red-400 hover:text-red-300 p-1 cursor-pointer"
+                          >
+                            <Trash className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Degree</label>
+                            <input
+                              type="text"
+                              value={edu.degree}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.education = [...(updated.education || [])];
+                                if (updated.education[idx]) {
+                                  updated.education[idx] = { ...updated.education[idx], degree: e.target.value };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Field of Study</label>
+                            <input
+                              type="text"
+                              value={edu.fieldOfStudy}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.education = [...(updated.education || [])];
+                                if (updated.education[idx]) {
+                                  updated.education[idx] = { ...updated.education[idx], fieldOfStudy: e.target.value };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">GPA</label>
+                            <input
+                              type="text"
+                              value={edu.gpa}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.education = [...(updated.education || [])];
+                                if (updated.education[idx]) {
+                                  updated.education[idx] = { ...updated.education[idx], gpa: e.target.value };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Start Date (Year)</label>
+                              <input
+                                type="text"
+                                placeholder="YYYY"
+                                value={edu.startDate}
+                                onChange={(e) => {
+                                  const updated = { ...editedProfile };
+                                  updated.education = [...(updated.education || [])];
+                                  if (updated.education[idx]) {
+                                    updated.education[idx] = { ...updated.education[idx], startDate: e.target.value };
+                                    setEditedProfile(updated);
+                                  }
+                                }}
+                                className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">End Date (Year)</label>
+                              <input
+                                type="text"
+                                placeholder="YYYY"
+                                value={edu.endDate}
+                                onChange={(e) => {
+                                  const updated = { ...editedProfile };
+                                  updated.education = [...(updated.education || [])];
+                                  if (updated.education[idx]) {
+                                    updated.education[idx] = { ...updated.education[idx], endDate: e.target.value };
+                                    setEditedProfile(updated);
+                                  }
+                                }}
+                                className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                              />
+                            </div>
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Relevant Coursework (comma separated)</label>
+                            <input
+                              type="text"
+                              value={(edu.coursework || []).join(', ')}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.education = [...(updated.education || [])];
+                                if (updated.education[idx]) {
+                                  updated.education[idx] = { 
+                                    ...updated.education[idx], 
+                                    coursework: e.target.value.split(',').map(s => s.trim()).filter(Boolean) 
+                                  };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">Honors & Awards (comma separated)</label>
+                            <input
+                              type="text"
+                              value={(edu.honors || []).join(', ')}
+                              onChange={(e) => {
+                                const updated = { ...editedProfile };
+                                updated.education = [...(updated.education || [])];
+                                if (updated.education[idx]) {
+                                  updated.education[idx] = { 
+                                    ...updated.education[idx], 
+                                    honors: e.target.value.split(',').map(s => s.trim()).filter(Boolean) 
+                                  };
+                                  setEditedProfile(updated);
+                                }
+                              }}
+                              className="w-full bg-darkBg border border-darkBorder rounded px-2.5 py-1 text-xs text-slate-200 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Skills Card */}
                 <div className="bg-darkCard border border-darkBorder rounded-xl p-6">
                   <h3 className="text-sm font-bold text-accentCyan uppercase tracking-widest border-b border-darkBorder pb-2 mb-4">

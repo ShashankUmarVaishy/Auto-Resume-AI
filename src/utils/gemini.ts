@@ -124,9 +124,15 @@ export async function parseResumeWithAI(rawText: string, apiKey: string): Promis
   const systemInstruction = 
     `You are an expert system that extracts structured resume data from unstructured text. 
     Analyze the text provided and map it into the requested JSON schema.
-    If some properties are missing, make a best-effort inference or leave them empty.
-    Generate a unique id string for projects and workExperience objects (e.g. 'work-1', 'proj-1').
-    Output strictly conforming to the requested JSON layout.`;
+
+    CRITICAL RULES FOR EXTRACTION:
+    1. STRICT SEGREGATION OF WORK EXPERIENCE & PROJECTS:
+       - 'workExperience' MUST only contain official employment, organization jobs, corporate roles, contract positions, or professional internships. Each entry MUST have a company name and a job title.
+       - 'projects' MUST only contain personal side projects, academic/university projects, hackathon achievements, or independent open-source contributions with detailed description(in 4 points).
+       - Do NOT duplicate entries between these lists. If a role is employment-based, it belongs strictly in workExperience. If it is independent, it belongs strictly in projects.
+    2. If some properties are missing, make a best-effort inference or leave them empty (do not invent information).
+    3. Generate a unique id string for projects and workExperience objects (e.g. 'work-1', 'proj-1').
+    4. Output strictly conforming to the requested JSON layout.`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -181,9 +187,10 @@ export async function tailorTextWithAI(
 
   const systemInstruction = 
     `You are a professional CV editor.
-    Your task is to rewrite, condense, or expand the user's project/work description to fit within a strict word limit of ${limitWords} words.
-    Maintain professional formatting, use action verbs, and preserve technical stacks.
-    Do not add meta-text, introductions, or pleasantries. Output only the rewritten content.`;
+    Your task is to rewrite, condense, or expand the user's project/work description to fit within a strict word limit of approximately ${limitWords} words.
+    CRITICAL: Output the content strictly as a pointwise list of professional bullet points (using • or -).
+    Use strong action verbs, emphasize technical stacks and metrics, and fit the bullet points to the requested length.
+    Do not add meta-text, introductions, or pleasantries. Output ONLY the raw pointwise bullet points.`;
 
   const response = await fetch(url, {
     method: 'POST',
