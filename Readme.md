@@ -6,11 +6,12 @@ AutoResume AI is a secure, local-first browser extension designed to eliminate t
 
 ## Key Features
 
-1. **Eliminating Redundancy**: AutoResume AI maps your resume fields (education, work details, contact info) directly to job portal inputs, filling them in with a single click.
-2. **Context-Aware Word Tailoring**: ATS portals often have strict character/word limits (e.g., 100, 250, or 500 words for project or role descriptions). You can shrink or expand project and experience summaries into formatted bulleted lists using Gemini AI directly in the focused textarea.
-3. **Smart Semantic Split Carousel**: Focusing on a project description field displays a dedicated **Projects Carousel** to browse and tailor individual projects. Focusing on a job experience field displays a dedicated **Work Experience Carousel** (no manual toggles required).
-4. **Universal Field Selector**: If automatic matching fails, clicking *"🔍 Select field manually..."* opens a comprehensive drawer to search, copy, or inject *any* parsed master profile field—including specific company details, project tech stacks, or university GPA/coursework.
-5. **Absolute Local Privacy**: AutoResume AI runs entirely client-side. Your resume, credentials, and API keys are stored locally, encrypted with **AES-GCM (256-bit)** using a master password you control. No central middleman server is involved.
+1.  **Multiple Matched Suggestions (Quick Tabs)**: Focusing on a form field runs a local semantic search and displays the **Top 3 unique matched recommendations** as horizontal tabs (e.g. `[ First Name ] [ Full Name ] [ GPA ]`). You can switch tabs to swap preview details instantly.
+2.  **RLHF Feedback Learning Engine**: When you correct a suggestion (by selecting tab 2/3 or choosing a field from the manual selector grid), the extension learns the association: `{ "cleaned input label" : "selected fieldKey" }`. Next time that label is focused, it immediately scores your preference with a perfect `1.0` confidence rating and places it in the first slot!
+3.  **Context-Aware Word Tailoring**: ATS portals often have strict character/word limits (e.g., 100, 250, or 500 words for project or role descriptions). You can shrink or expand project and experience summaries into formatted bulleted lists using Gemini AI directly in the focused textarea.
+4.  **Smart Semantic Split Carousel**: Focusing on a project description field displays a dedicated **Projects Carousel** to browse and tailor individual projects. Focusing on a job experience field displays a dedicated **Work Experience Carousel** (no manual toggles required).
+5.  **Universal Field Selector**: If automatic matching fails, clicking *"🔍 Select field manually..."* opens a comprehensive drawer to search, copy, or inject *any* parsed master profile field—including specific company details, project tech stacks, or university GPA/coursework.
+6.  **Absolute Local Privacy**: AutoResume AI runs entirely client-side. Your resume, credentials, and API keys are stored locally, encrypted with **AES-GCM (256-bit)** using a master password you control. No central middleman server is involved.
 
 ---
 
@@ -18,6 +19,8 @@ AutoResume AI is a secure, local-first browser extension designed to eliminate t
 * **WXT Framework**: Chrome Manifest V3 standard extension builder.
 * **React + Tailwind CSS**: Responsive, modern, and dark-themed candidate dashboard.
 * **Closed Shadow DOM**: Popovers are injected inside a closed shadow root, guaranteeing no styling leaks or interference with host pages.
+* **Zero-Dependency Local Matcher**: Built on a fast Jaro-Winkler string similarity + token overlap character matching helper. Replaced heavy WASM/worker ONNX pipelines, reducing compiled extension size by **95.4% (from 17MB down to 790KB)**.
+* **Clean Architectural Boundaries**: Separates similarity evaluation and synonym mapping dictionaries into a dedicated search service ([`SemanticSearch.ts`](file:///c:/Users/ksush/OneDrive/Programming/Project/auto_resume/src/utils/SemanticSearch.ts)), isolating DOM handlers and React view layers.
 * **Controlled State Bypass**: Intercepts native inputs and dispatches synthetic React/Vue events (`setNativeValue`) to prevent job forms from clearing autofilled inputs upon submission.
 * **ARIA Accessibility Extraction**: Resolves modern forms (like Google Forms or Workday) by tracing `aria-labelledby` and `aria-label` tags to identify question labels.
 
