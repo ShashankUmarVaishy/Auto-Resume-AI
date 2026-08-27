@@ -59,17 +59,38 @@ export function jaroWinkler(s1: string, s2: string): number {
 }
 
 /**
+ * Cleans input label queries to remove filler words and noise.
+ * Improves similarity scoring by focusing Jaro-Winkler on core tokens.
+ */
+export function cleanQueryLabel(label: string): string {
+  const fillers = [
+    'please', 'enter', 'input', 'type', 'write', 'your', 'here',
+    'primary', 'personal', 'current', 'latest', 'details', 'info',
+    'information', 'give', 'provide', 'tell', 'us', 'about', 'for', 'the'
+  ];
+  
+  const rawClean = label.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+  const tokens = rawClean.split(/\s+/).filter(Boolean);
+  const filteredTokens = tokens.filter(t => !fillers.includes(t));
+  
+  return filteredTokens.join(' ') || rawClean;
+}
+
+/**
  * Checks similarity score between a query label and a target synonym list.
  * Computes Jaro-Winkler and token overlap calculations.
  */
 export function getSemanticScore(query: string, synonyms: string[]): number {
-  const cleanQuery = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').trim();
+  const cleanQuery = cleanQueryLabel(query);
+  if (!cleanQuery) return 0.0;
+  
   const queryTokens = cleanQuery.split(/\s+/).filter(Boolean);
   
   let highestScore = 0.0;
   
   for (const synonym of synonyms) {
-    const cleanSynonym = synonym.toLowerCase().trim();
+    const cleanSynonym = cleanQueryLabel(synonym);
+    if (!cleanSynonym) continue;
     const synTokens = cleanSynonym.split(/\s+/).filter(Boolean);
     
     // 1. Direct Jaro-Winkler similarity

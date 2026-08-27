@@ -9,91 +9,7 @@ import { useResumeStore } from '../../src/store/useResumeStore';
 import { getSemanticScore } from '../../src/utils/vectorMath';
 import { Sparkles, Clipboard, Check, ChevronLeft, ChevronRight, RefreshCw, X, Brain } from 'lucide-react';
 
-// Resolve value from profile by dotted path string
-function getProfileValueByKey(profile: any, path: string): string {
-  if (!profile || !path) return '';
-  const parts = path.split('.');
-  let current = profile;
-  for (const part of parts) {
-    if (!current) return '';
-    const idx = parseInt(part, 10);
-    if (!isNaN(idx) && Array.isArray(current)) {
-      current = current[idx];
-    } else {
-      current = current[part];
-    }
-  }
-  if (Array.isArray(current)) {
-    return current.join(', ');
-  }
-  return typeof current === 'string' ? current : (current?.toString() || '');
-}
-
-// Local offline semantic search based on Jaro-Winkler + Token similarity mapping
-function runSemanticSearch(labelText: string, profile: any): { fieldKey: string; score: number } | null {
-  if (!labelText || !profile) return null;
-  
-  const candidates: Array<{ fieldKey: string; synonyms: string[] }> = [
-    { fieldKey: 'personalInfo.firstName', synonyms: ['first name', 'given name', 'fname', 'first_name'] },
-    { fieldKey: 'personalInfo.lastName', synonyms: ['last name', 'family name', 'last_name', 'lname'] },
-    { fieldKey: 'personalInfo.fullName', synonyms: ['full name', 'name', 'full_name', 'candidate', 'applicant', 'your name'] },
-    { fieldKey: 'personalInfo.email', synonyms: ['email', 'e-mail', 'mail', 'email_address', 'electronic mail', 'contact email'] },
-    { fieldKey: 'personalInfo.phone', synonyms: ['phone', 'telephone', 'mobile', 'cell', 'phone_number', 'contact number', 'cellular', 'cellular contact number'] },
-    { fieldKey: 'personalInfo.summaryStatement', synonyms: ['summary', 'bio', 'background', 'objective', 'overview', 'about me'] },
-    { fieldKey: 'personalInfo.urls.linkedin', synonyms: ['linkedin', 'linkedin profile', 'linkedin url', 'url_linkedin', 'url linkedin'] },
-    { fieldKey: 'personalInfo.urls.github', synonyms: ['github', 'github profile', 'github url', 'git', 'github link', 'url github'] },
-    { fieldKey: 'personalInfo.urls.portfolio', synonyms: ['portfolio', 'website', 'personal site', 'url_portfolio', 'web page', 'personal website', 'portfolio url'] },
-    
-    { fieldKey: 'skills.languages', synonyms: ['languages', 'languages spoken', 'programming languages', 'coding languages'] },
-    { fieldKey: 'skills.frameworks', synonyms: ['frameworks', 'libraries', 'technologies', 'tech stack'] },
-    { fieldKey: 'skills.toolsAndPlatforms', synonyms: ['tools', 'platforms', 'databases', 'software', 'environment'] },
-    { fieldKey: 'skills.coreCompetencies', synonyms: ['skills', 'core competencies', 'capabilities', 'expertise', 'competencies'] }
-  ];
-
-  if (profile.customSnippets) {
-    profile.customSnippets.forEach((snip: any, idx: number) => {
-      candidates.push({ fieldKey: `customSnippets.${idx}`, synonyms: [snip.label, `${snip.label} snippet`, `${snip.label} answer`] });
-    });
-  }
-
-  if (profile.education) {
-    profile.education.forEach((edu: any, idx: number) => {
-      candidates.push({ fieldKey: `education.${idx}.institution`, synonyms: [`school ${idx}`, `university ${idx}`, `college ${idx}`, 'institution', 'education history', 'university', 'school'] });
-      candidates.push({ fieldKey: `education.${idx}.degree`, synonyms: [`degree ${idx}`, `qualification ${idx}`, `diploma ${idx}`, 'academic title', 'degree', 'qualification'] });
-      candidates.push({ fieldKey: `education.${idx}.fieldOfStudy`, synonyms: [`field of study ${idx}`, `major ${idx}`, `study ${idx}`, 'specialization', 'subject', 'field of study'] });
-      candidates.push({ fieldKey: `education.${idx}.gpa`, synonyms: [`gpa ${idx}`, `grade point average ${idx}`, 'marks', 'school result', 'gpa', 'grade'] });
-    });
-  }
-
-  if (profile.workExperience) {
-    profile.workExperience.forEach((work: any, idx: number) => {
-      candidates.push({ fieldKey: `workExperience.${idx}.company`, synonyms: [`company ${idx}`, `employer ${idx}`, 'organization', 'company name', 'previous employer', 'employer'] });
-      candidates.push({ fieldKey: `workExperience.${idx}.role`, synonyms: [`job title ${idx}`, `role ${idx}`, 'position', 'designation', 'job role', 'role'] });
-      candidates.push({ fieldKey: `workExperience.${idx}.location`, synonyms: [`job location ${idx}`, 'company location', 'city', 'location'] });
-      candidates.push({ fieldKey: `workExperience.${idx}.shortSummary`, synonyms: [`responsibilities ${idx}`, `duties ${idx}`, 'work description', 'job description', 'experience details', 'accomplishments', 'duties'] });
-    });
-  }
-
-  if (profile.projects) {
-    profile.projects.forEach((proj: any, idx: number) => {
-      candidates.push({ fieldKey: `projects.${idx}.name`, synonyms: [`project name ${idx}`, `project title ${idx}`, 'project name', 'project title'] });
-      candidates.push({ fieldKey: `projects.${idx}.description`, synonyms: [`project description ${idx}`, `project details ${idx}`, 'project accomplishments', 'project description', 'highlights'] });
-    });
-  }
-
-  let bestMatch: { fieldKey: string; score: number } | null = null;
-  let highestScore = 0.70; // Semantic score threshold
-
-  for (const candidate of candidates) {
-    const score = getSemanticScore(labelText, candidate.synonyms);
-    if (score > highestScore) {
-      highestScore = score;
-      bestMatch = { fieldKey: candidate.fieldKey, score };
-    }
-  }
-
-  return bestMatch;
-}
+import { runSemanticSearch, getProfileValueByKey } from '../../src/utils/SemanticSearch';
 
 export default function PopoverElement() {
   const store = useResumeStore();
@@ -101,7 +17,11 @@ export default function PopoverElement() {
   // Active element matching states
   const [activeEl, setActiveEl] = useState<HTMLInputElement | HTMLTextAreaElement | null>(null);
   const [activeRect, setActiveRect] = useState<DOMRect | null>(null);
-  const [detectedMatch, setDetectedMatch] = useState<FieldMatch | null>(null);
+  const [detectedMatches, setDetectedMatches] = useState<FieldMatch[]>([]);
+  const [activeMatchIdx, setActiveMatchIdx] = useState(0);
+  
+  // Active selected match helper
+  const activeMatch = detectedMatches[activeMatchIdx] || null;
   
   // UI states
   const [showSpark, setShowSpark] = useState(false);
@@ -147,44 +67,53 @@ export default function PopoverElement() {
         const labelText = FieldDetector.getAssociatedLabelText(input);
         
         // Execute synchronous offline semantic search
-        const bestMatch = runSemanticSearch(labelText, store.resumeProfile);
+        const matches = runSemanticSearch(labelText, store.resumeProfile, store.learnedMappings);
         
-        if (bestMatch) {
-          console.log(`[Semantic Match] Found: "${bestMatch.fieldKey}" (score: ${bestMatch.score.toFixed(3)}) for label: "${labelText}"`);
-          
+        const mappedMatches: FieldMatch[] = matches.map(m => {
           let matchType: 'text' | 'project_selector' | 'experience_selector' = 'text';
           
-          // Map to correct carousel if a project or experience path is hit
-          if (bestMatch.fieldKey.startsWith('projects.')) {
+          if (m.fieldKey.startsWith('projects.')) {
             matchType = 'project_selector';
-            const idxMatch = bestMatch.fieldKey.match(/^projects\.(\d+)/);
+          } else if (m.fieldKey.startsWith('workExperience.')) {
+            matchType = 'experience_selector';
+          }
+          
+          const val = getProfileValueByKey(store.resumeProfile, m.fieldKey);
+          const labelParts = m.fieldKey.split('.');
+          const rawLabel = labelParts[labelParts.length - 1] || 'Autofill Field';
+          const cleanLabel = rawLabel.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+          
+          return {
+            type: matchType,
+            fieldKey: m.fieldKey,
+            value: val,
+            label: cleanLabel
+          };
+        });
+        
+        if (mappedMatches.length > 0) {
+          setDetectedMatches(mappedMatches);
+          setActiveMatchIdx(0);
+          
+          // Pre-select carousel active indexes if needed
+          const first = mappedMatches[0];
+          if (first && first.type === 'project_selector') {
+            const idxMatch = first.fieldKey.match(/^projects\.(\d+)/);
             if (idxMatch) {
               setActiveProjectIdx(parseInt(idxMatch[1] || '0', 10));
             }
-          } else if (bestMatch.fieldKey.startsWith('workExperience.')) {
-            matchType = 'experience_selector';
-            const idxMatch = bestMatch.fieldKey.match(/^workExperience\.(\d+)/);
+          } else if (first && first.type === 'experience_selector') {
+            const idxMatch = first.fieldKey.match(/^workExperience\.(\d+)/);
             if (idxMatch) {
               setActiveExperienceIdx(parseInt(idxMatch[1] || '0', 10));
             }
           }
-          
-          const val = getProfileValueByKey(store.resumeProfile, bestMatch.fieldKey);
-          const labelParts = bestMatch.fieldKey.split('.');
-          const rawLabel = labelParts[labelParts.length - 1] || 'Autofill Field';
-          const cleanLabel = rawLabel.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-          
-          setDetectedMatch({
-            type: matchType,
-            fieldKey: bestMatch.fieldKey,
-            value: val,
-            label: cleanLabel
-          });
         } else {
           // If no strong semantic match, fall back to safe generic types
           const isTextArea = input.tagName.toLowerCase() === 'textarea';
           const lowerLabel = labelText.toLowerCase();
           
+          let fallbackMatch: FieldMatch;
           if (isTextArea) {
             let matchType: 'textarea' | 'project_selector' | 'experience_selector' = 'textarea';
             if (lowerLabel.includes('project') || lowerLabel.includes('portfolio') || lowerLabel.includes('accomplish')) {
@@ -192,20 +121,22 @@ export default function PopoverElement() {
             } else if (lowerLabel.includes('work') || lowerLabel.includes('job') || lowerLabel.includes('experience') || lowerLabel.includes('employ')) {
               matchType = 'experience_selector';
             }
-            setDetectedMatch({
+            fallbackMatch = {
               type: matchType,
               fieldKey: 'generic_textarea',
               label: 'Textarea Field',
               value: ''
-            });
+            };
           } else {
-            setDetectedMatch({
+            fallbackMatch = {
               type: 'text',
               fieldKey: 'generic',
               label: 'Autofill Field',
               value: ''
-            });
+            };
           }
+          setDetectedMatches([fallbackMatch]);
+          setActiveMatchIdx(0);
         }
         setShowSpark(true);
         setShowPopover(false);
@@ -245,7 +176,7 @@ export default function PopoverElement() {
       window.removeEventListener('resize', handleScrollAndResize);
       window.removeEventListener('mousedown', handleOutsideClick);
     };
-  }, [activeEl, showPopover, store.resumeProfile]);
+  }, [activeEl, showPopover, store.resumeProfile, store.learnedMappings]);
 
   // Mouse Dragging Handlers for Movable Popover Window
   const handleDragStart = (e: React.MouseEvent) => {
@@ -283,7 +214,7 @@ export default function PopoverElement() {
     };
   }, [isDragging, dragStart]);
 
-  if (!showSpark || !activeRect || !detectedMatch) return null;
+  if (!showSpark || !activeRect || !activeMatch) return null;
 
   // Calculate coordinates relative to screen viewport (using position: fixed for scroll resilience)
   const sparkTop = activeRect.top + (activeRect.height - 24) / 2;
@@ -297,11 +228,23 @@ export default function PopoverElement() {
   const popoverLeft = activeRect.left;
 
   // Handle direct injection
-  const handleAutofill = (valueToFill: string) => {
+  const handleAutofill = (valueToFill: string, chosenFieldKey?: string) => {
     if (activeEl) {
       setNativeValue(activeEl, valueToFill);
       setShowPopover(false);
       setShowSpark(false);
+      
+      // If we autofilled a corrected matching key, learn the association!
+      if (chosenFieldKey) {
+        const defaultMatchKey = detectedMatches[0]?.fieldKey;
+        // Only save mapping if the user actively corrected or changed from the default recommendation
+        if (chosenFieldKey !== defaultMatchKey || activeMatchIdx > 0 || showManualSelect) {
+          const labelText = FieldDetector.getAssociatedLabelText(activeEl);
+          if (labelText) {
+            store.addLearnedMapping(labelText, chosenFieldKey);
+          }
+        }
+      }
     }
   };
 
@@ -327,7 +270,7 @@ export default function PopoverElement() {
     let sourceText = '';
     let context = '';
 
-    if (detectedMatch?.type === 'project_selector') {
+    if (activeMatch?.type === 'project_selector') {
       const projects = store.resumeProfile?.projects || [];
       if (projects.length === 0) return;
       const activeProject = projects[activeProjectIdx];
@@ -414,13 +357,13 @@ export default function PopoverElement() {
           {/* Popover Header (Draggable) */}
           <div 
             onMouseDown={handleDragStart}
-            className="flex justify-between items-center border-b border-darkBorder pb-2 mb-3 cursor-move select-none"
+            className="flex justify-between items-center border-b border-darkBorder pb-2 mb-2.5 cursor-move select-none"
             title="Drag to move panel"
           >
             <div className="flex items-center space-x-1.5 text-accentCyan">
               <span className="text-slate-500 font-mono text-[10px] mr-1">⋮⋮</span>
               <Brain className="w-4 h-4" />
-              <span className="text-xs font-bold uppercase tracking-wider">{detectedMatch.label}</span>
+              <span className="text-xs font-bold uppercase tracking-wider">{activeMatch.label}</span>
             </div>
             <button
               onClick={() => setShowPopover(false)}
@@ -430,6 +373,34 @@ export default function PopoverElement() {
               <X className="w-3.5 h-3.5" />
             </button>
           </div>
+
+          {/* Suggestions Quick Tabs */}
+          {!showManualSelect && detectedMatches.length > 1 && (
+            <div className="flex space-x-1 p-1 bg-slate-900 rounded-lg border border-darkBorder/40 mb-3 overflow-x-auto select-none">
+              {detectedMatches.map((m, idx) => (
+                <button
+                  key={m.fieldKey + idx}
+                  onClick={() => {
+                    setActiveMatchIdx(idx);
+                    if (m.type === 'project_selector') {
+                      const idxMatch = m.fieldKey.match(/^projects\.(\d+)/);
+                      if (idxMatch) setActiveProjectIdx(parseInt(idxMatch[1] || '0', 10));
+                    } else if (m.type === 'experience_selector') {
+                      const idxMatch = m.fieldKey.match(/^workExperience\.(\d+)/);
+                      if (idxMatch) setActiveExperienceIdx(parseInt(idxMatch[1] || '0', 10));
+                    }
+                  }}
+                  className={`flex-1 text-[9px] font-bold py-1 px-2 rounded truncate transition-all cursor-pointer text-center min-w-[70px] ${
+                    idx === activeMatchIdx
+                      ? 'bg-accentCyan text-darkBg shadow shadow-accentCyan/15'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  }`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* PROJECT SELECTOR / MANUAL SELECTOR / STANDARD FIELD VIEW */}
           {showManualSelect ? (
@@ -449,55 +420,55 @@ export default function PopoverElement() {
                 <span className="text-[9px] text-slate-500 uppercase font-semibold block">Personal Info</span>
                 <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.firstName || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.firstName || '', 'personalInfo.firstName'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
                   >
                     First Name
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.lastName || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.lastName || '', 'personalInfo.lastName'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
                   >
                     Last Name
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.fullName || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.fullName || '', 'personalInfo.fullName'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
                   >
                     Full Name
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.email || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.email || '', 'personalInfo.email'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
                   >
                     Email
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.phone || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.phone || '', 'personalInfo.phone'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
                   >
                     Phone
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.linkedin || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.linkedin || '', 'personalInfo.urls.linkedin'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
                   >
                     LinkedIn
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.github || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.github || '', 'personalInfo.urls.github'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
                   >
                     GitHub
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.portfolio || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.urls?.portfolio || '', 'personalInfo.urls.portfolio'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
                   >
                     Portfolio
                   </button>
                   <button
-                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.summaryStatement || ''); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill(store.resumeProfile?.personalInfo?.summaryStatement || '', 'personalInfo.summaryStatement'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer col-span-2"
                   >
                     Bio / Summary
@@ -510,25 +481,25 @@ export default function PopoverElement() {
                 <span className="text-[9px] text-slate-500 uppercase font-semibold block">Skills</span>
                 <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                   <button
-                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.languages || []).join(', ')); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.languages || []).join(', '), 'skills.languages'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
                   >
                     Languages
                   </button>
                   <button
-                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.frameworks || []).join(', ')); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.frameworks || []).join(', '), 'skills.frameworks'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 cursor-pointer"
                   >
                     Frameworks
                   </button>
                   <button
-                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.toolsAndPlatforms || []).join(', ')); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.toolsAndPlatforms || []).join(', '), 'skills.toolsAndPlatforms'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
                   >
                     Tools & Platforms
                   </button>
                   <button
-                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.coreCompetencies || []).join(', ')); setShowManualSelect(false); }}
+                    onClick={() => { handleAutofill((store.resumeProfile?.skills?.coreCompetencies || []).join(', '), 'skills.coreCompetencies'); setShowManualSelect(false); }}
                     className="text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 col-span-2 cursor-pointer"
                   >
                     Core Competencies
@@ -544,7 +515,7 @@ export default function PopoverElement() {
                     {store.resumeProfile.customSnippets.map((snip, idx) => (
                       <button
                         key={idx}
-                        onClick={() => { handleAutofill(snip.content); setShowManualSelect(false); }}
+                        onClick={() => { handleAutofill(snip.content, `customSnippets.${idx}`); setShowManualSelect(false); }}
                         className="w-full text-left bg-slate-800 hover:bg-slate-700 p-1.5 rounded truncate text-slate-200 block cursor-pointer"
                       >
                         {snip.label}
@@ -692,7 +663,7 @@ export default function PopoverElement() {
                 </div>
               )}
             </div>
-          ) : detectedMatch.type === 'project_selector' ? (
+          ) : activeMatch.type === 'project_selector' ? (
             <div>
               {(() => {
                 const projects = store.resumeProfile?.projects || [];
@@ -800,7 +771,7 @@ export default function PopoverElement() {
                 </button>
               </div>
             </div>
-          ) : detectedMatch.type === 'experience_selector' ? (
+          ) : activeMatch.type === 'experience_selector' ? (
             <div>
               {(() => {
                 const experiences = store.resumeProfile?.workExperience || [];
@@ -915,10 +886,10 @@ export default function PopoverElement() {
             /* STANDARD TEXT/SELECT FIELD VIEW */
             <div>
               <p className="text-xs text-slate-300 bg-darkBg/60 border border-darkBorder p-2.5 rounded-lg mb-3 break-words max-h-32 overflow-y-auto">
-                {detectedMatch.value || <span className="italic text-slate-500">Field is empty in profile</span>}
+                {activeMatch.value || <span className="italic text-slate-500">Field is empty in profile</span>}
               </p>
               
-              {detectedMatch.fieldKey === 'setup_prompt' ? (
+              {activeMatch.fieldKey === 'setup_prompt' ? (
                 <button
                   onClick={handleOpenOptions}
                   className="w-full bg-accentCyan hover:bg-zinc-200 text-darkBg font-bold py-1.5 rounded text-xs cursor-pointer transition-all hover:scale-[1.02] duration-150 flex items-center justify-center space-x-1"
@@ -929,15 +900,15 @@ export default function PopoverElement() {
               ) : (
                 <div className="flex space-x-2">
                   <button
-                    onClick={() => handleAutofill(detectedMatch.value)}
-                    disabled={!detectedMatch.value}
+                    onClick={() => handleAutofill(activeMatch.value, activeMatch.fieldKey)}
+                    disabled={!activeMatch.value}
                     className="flex-1 bg-accentCyan hover:bg-cyan-500 text-darkBg font-bold py-1.5 rounded text-xs cursor-pointer transition-colors disabled:opacity-50"
                   >
                     Autofill Field
                   </button>
                   <button
-                    onClick={() => handleCopyToClipboard(detectedMatch.value)}
-                    disabled={!detectedMatch.value}
+                    onClick={() => handleCopyToClipboard(activeMatch.value)}
+                    disabled={!activeMatch.value}
                     className="px-3 bg-slate-800 hover:bg-slate-700 border border-darkBorder rounded text-slate-300 flex items-center justify-center cursor-pointer transition-colors disabled:opacity-50"
                     title="Copy to clipboard"
                   >
@@ -950,7 +921,7 @@ export default function PopoverElement() {
                 </div>
               )}
 
-              {detectedMatch.fieldKey !== 'setup_prompt' && (
+              {activeMatch.fieldKey !== 'setup_prompt' && (
                 <div className="mt-3 pt-2 border-t border-darkBorder/40 text-center">
                   <button
                     onClick={() => setShowManualSelect(true)}

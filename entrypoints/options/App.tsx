@@ -19,7 +19,7 @@ export default function App() {
   const [authError, setAuthError] = useState('');
   
   // App navigation state
-  const [activeTab, setActiveTab] = useState<'profile' | 'documents' | 'snippets' | 'settings'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'documents' | 'snippets' | 'settings' | 'learning'>('profile');
   
   // Settings / API Key forms
   const [apiKeyInput, setApiKeyInput] = useState('');
@@ -462,6 +462,18 @@ export default function App() {
           >
             <Edit2 className="w-4 h-4" />
             <span>Custom QA Snippets</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('learning')}
+            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
+              activeTab === 'learning' 
+                ? 'bg-slate-800 text-amber-400' 
+                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+            }`}
+          >
+            <Brain className="w-4 h-4" />
+            <span>Learning Engine</span>
           </button>
 
           <button
@@ -1511,6 +1523,57 @@ export default function App() {
               >
                 Permanently Wipe Extension Storage
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* LEARNING ENGINE TAB */}
+        {activeTab === 'learning' && (
+          <div>
+            <div className="mb-6">
+              <h1 className="text-2xl font-bold">Feedback Learning Engine</h1>
+              <p className="text-xs text-slate-400 mt-1">
+                View, manage, or remove custom mappings learned during application form autofilling.
+              </p>
+            </div>
+
+            <div className="bg-darkCard border border-darkBorder rounded-xl p-6">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Learned Field Mappings</h3>
+              
+              {!store.learnedMappings || Object.keys(store.learnedMappings).length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-xs border border-dashed border-darkBorder rounded-xl bg-darkBg/20">
+                  No custom field associations learned yet. Fill forms and select manual corrections to train the engine.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-darkBorder text-slate-400 uppercase tracking-wider text-[10px]">
+                        <th className="py-3 px-4 font-semibold">Form Input Label (Cleaned)</th>
+                        <th className="py-3 px-4 font-semibold">Associated Resume Field Path</th>
+                        <th className="py-3 px-4 text-right font-semibold">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-darkBorder/40">
+                      {Object.entries(store.learnedMappings).map(([label, fieldKey]) => (
+                        <tr key={label} className="hover:bg-slate-900/40 transition-colors">
+                          <td className="py-3 px-4 text-slate-200 font-mono font-medium">{label}</td>
+                          <td className="py-3 px-4 text-accentCyan font-mono">{fieldKey}</td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => store.deleteLearnedMapping(label)}
+                              className="text-red-400 hover:text-red-300 p-1 cursor-pointer transition-colors"
+                              title="Delete learned mapping"
+                            >
+                              <Trash className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

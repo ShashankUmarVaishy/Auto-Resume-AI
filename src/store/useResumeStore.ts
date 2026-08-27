@@ -3,6 +3,7 @@ declare const chrome: any;
 import { create } from 'zustand';
 import type { MasterResumeProfile, DocumentFile } from '../types';
 import { encryptText, decryptText } from '../utils/crypto';
+import { cleanQueryLabel } from '../utils/vectorMath';
 
 interface StoreState {
   isLocked: boolean;
@@ -10,6 +11,7 @@ interface StoreState {
   apiKey: string; // Plaintext in memory only
   resumeProfile: MasterResumeProfile | null;
   uploadedDocuments: DocumentFile[];
+  learnedMappings: Record<string, string>;
   
   // Actions
   init: () => Promise<void>;
@@ -21,6 +23,8 @@ interface StoreState {
   updateResumeProfile: (profile: MasterResumeProfile) => Promise<void>;
   addDocument: (doc: DocumentFile) => Promise<void>;
   deleteDocument: (id: string) => Promise<void>;
+  addLearnedMapping: (labelText: string, fieldKey: string) => Promise<void>;
+  deleteLearnedMapping: (labelText: string) => Promise<void>;
 }
 
 export const useResumeStore = create<StoreState>((set, get) => ({
@@ -29,6 +33,7 @@ export const useResumeStore = create<StoreState>((set, get) => ({
   apiKey: '',
   resumeProfile: null,
   uploadedDocuments: [],
+  learnedMappings: {},
   
   init: async () => {
     if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
@@ -48,7 +53,8 @@ export const useResumeStore = create<StoreState>((set, get) => ({
     const data = await chrome.storage.local.get([
       'verifyToken',
       'resumeProfile',
-      'uploadedDocuments'
+      'uploadedDocuments',
+      'learnedMappings'
     ]);
 
     // Check if the decrypted API key is already unlocked in session storage
@@ -67,7 +73,8 @@ export const useResumeStore = create<StoreState>((set, get) => ({
       isLocked: !sessionApiKey,
       apiKey: sessionApiKey,
       resumeProfile: data.resumeProfile || null,
-      uploadedDocuments: data.uploadedDocuments || []
+      uploadedDocuments: data.uploadedDocuments || [],
+      learnedMappings: data.learnedMappings || {}
     });
 
     // Listen for changes from other contexts (e.g. Popup updates key, Options page updates profile)
@@ -86,6 +93,9 @@ export const useResumeStore = create<StoreState>((set, get) => ({
         }
         if (changes.uploadedDocuments) {
           updates.uploadedDocuments = changes.uploadedDocuments.newValue || [];
+        }
+        if (changes.learnedMappings) {
+          updates.learnedMappings = changes.learnedMappings.newValue || {};
         }
         set(updates);
       } else if (areaName === 'session') {
@@ -176,7 +186,8 @@ export const useResumeStore = create<StoreState>((set, get) => ({
       'verifyToken',
       'encryptedApiKey',
       'resumeProfile',
-      'uploadedDocuments'
+      'uploadedDocuments',
+      'learnedMappings'
     ]);
     
     if (chrome.storage.session) {
@@ -188,7 +199,8 @@ export const useResumeStore = create<StoreState>((set, get) => ({
       isLocked: true,
       apiKey: '',
       resumeProfile: null,
-      uploadedDocuments: []
+      uploadedDocuments: [],
+      learnedMappings: {}
     });
   },
   
@@ -219,5 +231,35 @@ export const useResumeStore = create<StoreState>((set, get) => ({
     set({
       uploadedDocuments: documents
     });
+  },
+
+  addLearnedMapping: async (labelText: string, fieldKey: string) => {
+    const cleanLabel = cleanQueryLabel(labelText);
+    if (!cleanLabel) return;
+
+    const newMappings = { ...get().learnedMappings, [cleanLabel]: fieldKey };
+    await chrome.storage.local.set({
+      learnedMappings: newMappings
+    });
+    set({
+      learnedMappings: newMappings
+    });
+    console.log(`[RLHF Learning] Mapped label "${cleanLabel}" -> field "${fieldKey}"`);
+  },
+
+  deleteLearnedMapping: async (labelText: string) => {
+    const cleanLabel = cleanQueryLabel(labelText);
+    if (!cleanLabel) return;
+    
+    const updated = { ...get().learnedMappings };
+    delete updated[cleanLabel];
+    
+    await chrome.storage.local.set({
+      learnedMappings: updated
+    });
+    set({
+      learnedMappings: updated
+    });
+    console.log(`[RLHF Learning] Deleted mapping for "${cleanLabel}"`);
   }
 }));
