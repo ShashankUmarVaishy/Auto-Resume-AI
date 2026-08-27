@@ -63,6 +63,12 @@ When an input field receives focus, the `FieldDetector` evaluates it:
 *   ATS job forms built on React, Vue, or Angular intercept standard `.value` changes. Setting `input.value = 'john@example.com'` directly fails because the framework's internal virtual DOM does not trigger its state listeners.
 *   `setNativeValue` overrides the prototype descriptor setter, updates the value, and dispatches synthetic `input`, `change`, and `blur` events so form validation systems recognize the new data.
 
+### Layer 6: Offline Matcher & RLHF Feedback Loop
+*   **Jaro-Winkler + Token Matcher**: Operates entirely client-side using character-level string metrics, bypassing secure Content Security Policies (CSP) that block heavy WebAssembly-based models on external job portals.
+*   **Sanitization Pipeline**: All labels and cache keys are cleaned with `cleanQueryLabel()` to strip fillers (`please`, `enter`, `your`, etc.) and punctuation, collapsing variations (like `"Email:"` or `"Please enter your email"`) to a single key.
+*   **Correction Learn-Bypass Cache**: Custom corrections (swapping to secondary recommendations or manually selecting fields) save the clean label mapping to `chrome.storage.local`. On subsequent focus events, this pairing immediately returns score `1.0`, pushing your correction to slot #1.
+*   **Redundant Mapping Shield**: Clicking autofill on the default slot #1 prediction bypasses the database save, preventing storage pollution. Mappings are managed via a dedicated table view with instant delete actions on the options panel dashboard.
+
 ---
 
 ## 3. Cryptographic API Key Safety Flow
