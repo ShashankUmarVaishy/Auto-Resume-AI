@@ -6,7 +6,94 @@ import type { FieldMatch } from '../../src/utils/FieldDetector';
 import { setNativeValue } from '../../src/utils/injector';
 import { tailorTextWithAI } from '../../src/utils/gemini';
 import { useResumeStore } from '../../src/store/useResumeStore';
+import { getSemanticScore } from '../../src/utils/vectorMath';
 import { Sparkles, Clipboard, Check, ChevronLeft, ChevronRight, RefreshCw, X, Brain } from 'lucide-react';
+
+// Resolve value from profile by dotted path string
+function getProfileValueByKey(profile: any, path: string): string {
+  if (!profile || !path) return '';
+  const parts = path.split('.');
+  let current = profile;
+  for (const part of parts) {
+    if (!current) return '';
+    const idx = parseInt(part, 10);
+    if (!isNaN(idx) && Array.isArray(current)) {
+      current = current[idx];
+    } else {
+      current = current[part];
+    }
+  }
+  if (Array.isArray(current)) {
+    return current.join(', ');
+  }
+  return typeof current === 'string' ? current : (current?.toString() || '');
+}
+
+// Local offline semantic search based on Jaro-Winkler + Token similarity mapping
+function runSemanticSearch(labelText: string, profile: any): { fieldKey: string; score: number } | null {
+  if (!labelText || !profile) return null;
+  
+  const candidates: Array<{ fieldKey: string; synonyms: string[] }> = [
+    { fieldKey: 'personalInfo.firstName', synonyms: ['first name', 'given name', 'fname', 'first_name'] },
+    { fieldKey: 'personalInfo.lastName', synonyms: ['last name', 'family name', 'last_name', 'lname'] },
+    { fieldKey: 'personalInfo.fullName', synonyms: ['full name', 'name', 'full_name', 'candidate', 'applicant', 'your name'] },
+    { fieldKey: 'personalInfo.email', synonyms: ['email', 'e-mail', 'mail', 'email_address', 'electronic mail', 'contact email'] },
+    { fieldKey: 'personalInfo.phone', synonyms: ['phone', 'telephone', 'mobile', 'cell', 'phone_number', 'contact number', 'cellular', 'cellular contact number'] },
+    { fieldKey: 'personalInfo.summaryStatement', synonyms: ['summary', 'bio', 'background', 'objective', 'overview', 'about me'] },
+    { fieldKey: 'personalInfo.urls.linkedin', synonyms: ['linkedin', 'linkedin profile', 'linkedin url', 'url_linkedin', 'url linkedin'] },
+    { fieldKey: 'personalInfo.urls.github', synonyms: ['github', 'github profile', 'github url', 'git', 'github link', 'url github'] },
+    { fieldKey: 'personalInfo.urls.portfolio', synonyms: ['portfolio', 'website', 'personal site', 'url_portfolio', 'web page', 'personal website', 'portfolio url'] },
+    
+    { fieldKey: 'skills.languages', synonyms: ['languages', 'languages spoken', 'programming languages', 'coding languages'] },
+    { fieldKey: 'skills.frameworks', synonyms: ['frameworks', 'libraries', 'technologies', 'tech stack'] },
+    { fieldKey: 'skills.toolsAndPlatforms', synonyms: ['tools', 'platforms', 'databases', 'software', 'environment'] },
+    { fieldKey: 'skills.coreCompetencies', synonyms: ['skills', 'core competencies', 'capabilities', 'expertise', 'competencies'] }
+  ];
+
+  if (profile.customSnippets) {
+    profile.customSnippets.forEach((snip: any, idx: number) => {
+      candidates.push({ fieldKey: `customSnippets.${idx}`, synonyms: [snip.label, `${snip.label} snippet`, `${snip.label} answer`] });
+    });
+  }
+
+  if (profile.education) {
+    profile.education.forEach((edu: any, idx: number) => {
+      candidates.push({ fieldKey: `education.${idx}.institution`, synonyms: [`school ${idx}`, `university ${idx}`, `college ${idx}`, 'institution', 'education history', 'university', 'school'] });
+      candidates.push({ fieldKey: `education.${idx}.degree`, synonyms: [`degree ${idx}`, `qualification ${idx}`, `diploma ${idx}`, 'academic title', 'degree', 'qualification'] });
+      candidates.push({ fieldKey: `education.${idx}.fieldOfStudy`, synonyms: [`field of study ${idx}`, `major ${idx}`, `study ${idx}`, 'specialization', 'subject', 'field of study'] });
+      candidates.push({ fieldKey: `education.${idx}.gpa`, synonyms: [`gpa ${idx}`, `grade point average ${idx}`, 'marks', 'school result', 'gpa', 'grade'] });
+    });
+  }
+
+  if (profile.workExperience) {
+    profile.workExperience.forEach((work: any, idx: number) => {
+      candidates.push({ fieldKey: `workExperience.${idx}.company`, synonyms: [`company ${idx}`, `employer ${idx}`, 'organization', 'company name', 'previous employer', 'employer'] });
+      candidates.push({ fieldKey: `workExperience.${idx}.role`, synonyms: [`job title ${idx}`, `role ${idx}`, 'position', 'designation', 'job role', 'role'] });
+      candidates.push({ fieldKey: `workExperience.${idx}.location`, synonyms: [`job location ${idx}`, 'company location', 'city', 'location'] });
+      candidates.push({ fieldKey: `workExperience.${idx}.shortSummary`, synonyms: [`responsibilities ${idx}`, `duties ${idx}`, 'work description', 'job description', 'experience details', 'accomplishments', 'duties'] });
+    });
+  }
+
+  if (profile.projects) {
+    profile.projects.forEach((proj: any, idx: number) => {
+      candidates.push({ fieldKey: `projects.${idx}.name`, synonyms: [`project name ${idx}`, `project title ${idx}`, 'project name', 'project title'] });
+      candidates.push({ fieldKey: `projects.${idx}.description`, synonyms: [`project description ${idx}`, `project details ${idx}`, 'project accomplishments', 'project description', 'highlights'] });
+    });
+  }
+
+  let bestMatch: { fieldKey: string; score: number } | null = null;
+  let highestScore = 0.70; // Semantic score threshold
+
+  for (const candidate of candidates) {
+    const score = getSemanticScore(labelText, candidate.synonyms);
+    if (score > highestScore) {
+      highestScore = score;
+      bestMatch = { fieldKey: candidate.fieldKey, score };
+    }
+  }
+
+  return bestMatch;
+}
 
 export default function PopoverElement() {
   const store = useResumeStore();
@@ -53,22 +140,76 @@ export default function PopoverElement() {
         !(target.getAttribute('type') === 'file')
       ) {
         const input = target as HTMLInputElement | HTMLTextAreaElement;
+        setActiveEl(input);
+        setActiveRect(input.getBoundingClientRect());
+        setDragPosition(null);
         
-        // Match with heuristics
-        const match = FieldDetector.detect(input, store.resumeProfile);
-        if (match) {
-          setActiveEl(input);
-          setDetectedMatch(match);
-          setActiveRect(input.getBoundingClientRect());
-          setShowSpark(true);
-          setShowPopover(false);
-          setShowManualSelect(false);
-          setDragPosition(null);
+        const labelText = FieldDetector.getAssociatedLabelText(input);
+        
+        // Execute synchronous offline semantic search
+        const bestMatch = runSemanticSearch(labelText, store.resumeProfile);
+        
+        if (bestMatch) {
+          console.log(`[Semantic Match] Found: "${bestMatch.fieldKey}" (score: ${bestMatch.score.toFixed(3)}) for label: "${labelText}"`);
+          
+          let matchType: 'text' | 'project_selector' | 'experience_selector' = 'text';
+          
+          // Map to correct carousel if a project or experience path is hit
+          if (bestMatch.fieldKey.startsWith('projects.')) {
+            matchType = 'project_selector';
+            const idxMatch = bestMatch.fieldKey.match(/^projects\.(\d+)/);
+            if (idxMatch) {
+              setActiveProjectIdx(parseInt(idxMatch[1] || '0', 10));
+            }
+          } else if (bestMatch.fieldKey.startsWith('workExperience.')) {
+            matchType = 'experience_selector';
+            const idxMatch = bestMatch.fieldKey.match(/^workExperience\.(\d+)/);
+            if (idxMatch) {
+              setActiveExperienceIdx(parseInt(idxMatch[1] || '0', 10));
+            }
+          }
+          
+          const val = getProfileValueByKey(store.resumeProfile, bestMatch.fieldKey);
+          const labelParts = bestMatch.fieldKey.split('.');
+          const rawLabel = labelParts[labelParts.length - 1] || 'Autofill Field';
+          const cleanLabel = rawLabel.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+          
+          setDetectedMatch({
+            type: matchType,
+            fieldKey: bestMatch.fieldKey,
+            value: val,
+            label: cleanLabel
+          });
         } else {
-          // If no match found, hide spark
-          setShowSpark(false);
-          setShowPopover(false);
+          // If no strong semantic match, fall back to safe generic types
+          const isTextArea = input.tagName.toLowerCase() === 'textarea';
+          const lowerLabel = labelText.toLowerCase();
+          
+          if (isTextArea) {
+            let matchType: 'textarea' | 'project_selector' | 'experience_selector' = 'textarea';
+            if (lowerLabel.includes('project') || lowerLabel.includes('portfolio') || lowerLabel.includes('accomplish')) {
+              matchType = 'project_selector';
+            } else if (lowerLabel.includes('work') || lowerLabel.includes('job') || lowerLabel.includes('experience') || lowerLabel.includes('employ')) {
+              matchType = 'experience_selector';
+            }
+            setDetectedMatch({
+              type: matchType,
+              fieldKey: 'generic_textarea',
+              label: 'Textarea Field',
+              value: ''
+            });
+          } else {
+            setDetectedMatch({
+              type: 'text',
+              fieldKey: 'generic',
+              label: 'Autofill Field',
+              value: ''
+            });
+          }
         }
+        setShowSpark(true);
+        setShowPopover(false);
+        setShowManualSelect(false);
       }
     };
 
@@ -83,7 +224,6 @@ export default function PopoverElement() {
       const target = e.target as HTMLElement;
       
       // Since our UI is inside a closed shadow root, any click inside it is retargeted to the shadow host.
-      // We ignore these to prevent the popover from closing prematurely before button actions run.
       if (target && target.id === 'autoresume-host') {
         return;
       }

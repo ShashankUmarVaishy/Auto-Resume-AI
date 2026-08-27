@@ -73,3 +73,4 @@ export interface DocumentFile {
   size: number; // in bytes
   uploadedAt: string;
 }
+
